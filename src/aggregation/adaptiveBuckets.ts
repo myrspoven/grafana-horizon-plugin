@@ -1,25 +1,15 @@
 import { TimeSeries, TimeSeriesPoint } from '../data/extractSeries';
-import { NonlinearTimeScale, TimeZoneId } from '../scales/nonlinearTime';
+import { NonlinearTimeScale } from '../scales/nonlinearTime';
 import { AggregationMode, ContextCompressionOptions } from '../types';
 
-const MINUTE_MS = 60 * 1000;
+const BUCKET_PIXEL_WIDTH = 2;
 
 interface Bucket {
   time: number;
+  timeSum: number;
   sum: number;
   count: number;
   max: number;
-}
-
-function getBucketMinutes(zoneId: TimeZoneId, options: ContextCompressionOptions): number {
-  switch (zoneId) {
-    case 'recent':
-      return options.recentBucketMinutes;
-    case 'transition':
-      return options.transitionBucketMinutes;
-    case 'historical':
-      return options.historicalBucketMinutes;
-  }
 }
 
 function aggregateValue(bucket: Bucket, mode: AggregationMode): number {
@@ -42,21 +32,20 @@ function aggregatePoints(
       continue;
     }
 
-    const zone = scale.zoneFor(point.time);
-    const bucketMs = Math.max(1, getBucketMinutes(zone.id, options)) * MINUTE_MS;
-    const bucketIndex = Math.floor((point.time - zone.start) / bucketMs);
-    const bucketStart = zone.start + bucketIndex * bucketMs;
-    const bucketTime = Math.min(zone.end, bucketStart + bucketMs / 2);
-    const key = `${zone.id}:${bucketIndex}`;
+    const projectedX = scale.x(point.time);
+    const bucketIndex = Math.floor(projectedX / BUCKET_PIXEL_WIDTH);
+    const key = `${bucketIndex}`;
     const existing = buckets.get(key);
 
     if (existing) {
       existing.sum += point.value;
+      existing.timeSum += point.time;
       existing.count += 1;
       existing.max = Math.max(existing.max, point.value);
     } else {
       buckets.set(key, {
-        time: bucketTime,
+        time: point.time,
+        timeSum: point.time,
         sum: point.value,
         count: 1,
         max: point.value,
@@ -67,7 +56,7 @@ function aggregatePoints(
   return Array.from(buckets.values())
     .sort((a, b) => a.time - b.time)
     .map((bucket) => ({
-      time: bucket.time,
+      time: bucket.timeSum / bucket.count,
       value: aggregateValue(bucket, options.aggregationMode),
     }));
 }
@@ -84,4 +73,3 @@ export function aggregateSeries(
     }))
     .filter((item) => item.points.length > 0);
 }
-

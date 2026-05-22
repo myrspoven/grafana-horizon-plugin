@@ -44,11 +44,29 @@ function logTicks(max: number, y: (value: number) => number): ValueTick[] {
     ticks.push(max);
   }
 
-  return ticks.map((value) => ({
+  return removeCrowdedTicks(ticks.map((value) => ({
     value,
     y: y(value),
     label: formatTick(Math.round(value)),
-  }));
+  })));
+}
+
+function removeCrowdedTicks(ticks: ValueTick[], minPixelSpacing = 16): ValueTick[] {
+  return ticks.reduce<ValueTick[]>((visibleTicks, tick, index) => {
+    const previous = visibleTicks[visibleTicks.length - 1];
+    const isFinalTick = index === ticks.length - 1;
+
+    if (!previous || Math.abs(previous.y - tick.y) >= minPixelSpacing) {
+      visibleTicks.push(tick);
+      return visibleTicks;
+    }
+
+    if (isFinalTick) {
+      visibleTicks[visibleTicks.length - 1] = tick;
+    }
+
+    return visibleTicks;
+  }, []);
 }
 
 export function createValueScale(maxValue: number, height: number, mode: YScaleMode): ValueScale {
@@ -81,4 +99,3 @@ export function createValueScale(maxValue: number, height: number, mode: YScaleM
     ticks: linearTicks(max, height, y),
   };
 }
-

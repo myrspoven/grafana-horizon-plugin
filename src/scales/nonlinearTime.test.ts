@@ -2,14 +2,21 @@ import { createNonlinearTimeScale } from './nonlinearTime';
 import { defaultOptions } from '../types';
 
 describe('createNonlinearTimeScale', () => {
-  it('maps zone boundaries to configured width proportions', () => {
+  it('maps the domain boundaries to the plot edges', () => {
     const now = Date.UTC(2021, 0, 8);
     const scale = createNonlinearTimeScale(defaultOptions, 1000, now);
 
     expect(scale.x(scale.domainStart)).toBeCloseTo(0);
-    expect(scale.x(scale.zones[0].end)).toBeCloseTo(150);
-    expect(scale.x(scale.zones[1].end)).toBeCloseTo(350);
     expect(scale.x(scale.domainEnd)).toBeCloseTo(1000);
+  });
+
+  it('allocates more horizontal space to recent time than old time', () => {
+    const now = Date.UTC(2021, 0, 8);
+    const scale = createNonlinearTimeScale(defaultOptions, 1000, now);
+    const newestHourWidth = scale.x(now) - scale.x(now - 60 * 60 * 1000);
+    const oldestHourWidth = scale.x(scale.domainStart + 60 * 60 * 1000) - scale.x(scale.domainStart);
+
+    expect(newestHourWidth).toBeGreaterThan(oldestHourWidth);
   });
 
   it('is monotonic across the whole domain', () => {
@@ -26,4 +33,3 @@ describe('createNonlinearTimeScale', () => {
     }
   });
 });
-

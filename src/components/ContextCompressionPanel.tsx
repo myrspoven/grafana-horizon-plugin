@@ -1,14 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { KeyboardEvent, useMemo, useState } from 'react';
 import { PanelProps } from '@grafana/data';
 import { css, cx } from '@emotion/css';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 
 import { aggregateSeries } from '../aggregation/adaptiveBuckets';
 import { extractTimeSeries, TimeSeries, TimeSeriesPoint } from '../data/extractSeries';
-import { createNonlinearTimeScale, TimeZoneId } from '../scales/nonlinearTime';
+import { createNonlinearTimeScale } from '../scales/nonlinearTime';
 import { createValueScale } from '../scales/valueScale';
 import { generateTemporalMarkers } from '../rendering/markers';
-import { ContextCompressionOptions, resolveOptions } from '../types';
+import { ColorPalette, ContextCompressionOptions, LineStyle, resolveOptions } from '../types';
 
 interface Props extends PanelProps<ContextCompressionOptions> {}
 
@@ -17,12 +17,11 @@ interface SeriesStats {
   max: number | null;
 }
 
-const palette = ['#b877d9', '#8f7bd1', '#73bf69', '#f2495c', '#ff9830', '#5794f2', '#fade2a', '#7eb6ff'];
-
-const zoneOpacity: Record<TimeZoneId, number> = {
-  historical: 0.36,
-  transition: 0.58,
-  recent: 0.95,
+const palettes: Record<ColorPalette, string[]> = {
+  grafana: ['#b877d9', '#8f7bd1', '#73bf69', '#f2495c', '#ff9830', '#5794f2', '#fade2a', '#7eb6ff'],
+  classic: ['#7eb26d', '#eab839', '#6ed0e0', '#ef843c', '#e24d42', '#1f78c1', '#ba43a9', '#705da0'],
+  cool: ['#5794f2', '#56d9d9', '#73bf69', '#8f7bd1', '#33a2a2', '#7eb6ff', '#a352cc', '#70dbed'],
+  warm: ['#f2495c', '#ff9830', '#fade2a', '#ff7383', '#f2cc0c', '#efa6b0', '#e02f44', '#ffb357'],
 };
 
 const getStyles = () => ({
@@ -47,8 +46,6 @@ const getStyles = () => ({
     grid-template-columns: 1fr 48px 48px;
     overflow: hidden;
     position: absolute;
-    right: 8px;
-    top: 8px;
   `,
   legendHeader: css`
     font-size: 11px;
@@ -78,6 +75,18 @@ const getStyles = () => ({
     font-size: 11px;
     line-height: 16px;
     text-align: right;
+  `,
+  legendToggle: css`
+    cursor: pointer;
+    user-select: none;
+
+    &:focus-visible {
+      outline: 1px solid currentColor;
+      outline-offset: 2px;
+    }
+  `,
+  legendHidden: css`
+    opacity: 0.38;
   `,
 });
 
@@ -128,13 +137,31 @@ function buildStepPath(points: TimeSeriesPoint[], x: (time: number) => number, y
   return commands.join(' ');
 }
 
-function pointsInZone(points: TimeSeriesPoint[], zoneId: TimeZoneId, scale: ReturnType<typeof createNonlinearTimeScale>) {
-  const zone = scale.zones.find((item) => item.id === zoneId);
-  if (!zone) {
-    return [];
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getPaletteColor(paletteName: ColorPalette, index: number): string {
+  const colors = palettes[paletteName] ?? palettes.grafana;
+  return colors[index % colors.length];
+}
+
+function getLineDash(style: LineStyle, lineWidth: number): string | undefined {
+  if (style === 'dash') {
+    return `${Math.max(4, lineWidth * 4)} ${Math.max(3, lineWidth * 3)}`;
   }
 
-  return points.filter((point) => point.time >= zone.start && point.time <= zone.end);
+  if (style === 'dot') {
+    return `${Math.max(1, lineWidth)} ${Math.max(3, lineWidth * 3)}`;
+  }
+
+  return undefined;
+}
+
+function startOfLocalDay(time: number): number {
+  const date = new Date(time);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
 }
 
 export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width, height, timeRange }) => {
@@ -142,6 +169,7 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
   const styles = useStyles2(getStyles);
   const resolvedOptions = resolveOptions(options);
   const rawSeries = useMemo(() => extractTimeSeries(data), [data]);
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => new Set());
 
   if (rawSeries.length === 0) {
     return (
@@ -161,13 +189,20 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
     );
   }
 
-  const legendWidth = resolvedOptions.showLegend && width >= 560 ? Math.min(250, Math.max(190, width * 0.28)) : 0;
-  const margin = { top: 14, right: legendWidth + 14, bottom: 24, left: 36 };
+  const canShowLegend = resolvedOptions.showLegend && width >= 360;
+  const showRightLegend = canShowLegend && resolvedOptions.legendPlacement === 'right' && width >= 560;
+  const showBottomLegend = canShowLegend && resolvedOptions.legendPlacement === 'bottom';
+  const showLegend = showRightLegend || showBottomLegend;
+  const legendWidth =
+    showRightLegend ? Math.min(250, Math.max(190, width * 0.28)) : 0;
+  const legendHeight = showBottomLegend ? Math.min(120, Math.max(44, 24 + rawSeries.length * 18)) : 0;
+  const margin = { top: 14, right: legendWidth + 14, bottom: 24 + legendHeight, left: 36 };
   const plotWidth = Math.max(1, width - margin.left - margin.right);
   const plotHeight = Math.max(1, height - margin.top - margin.bottom);
   const now = timeRange.to.valueOf();
   const timeScale = createNonlinearTimeScale(resolvedOptions, plotWidth, now);
   const series = aggregateSeries(rawSeries, timeScale, resolvedOptions);
+  const visibleSeries = series.filter((item) => !hiddenSeries.has(item.id));
 
   if (series.length === 0) {
     return (
@@ -187,13 +222,36 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
     );
   }
 
-  const valueScale = createValueScale(getMaxValue(series), plotHeight, resolvedOptions.yScaleMode);
+  const valueScale = createValueScale(getMaxValue(visibleSeries), plotHeight, resolvedOptions.yScaleMode);
   const temporalMarkers = generateTemporalMarkers(timeScale);
   const x = (time: number) => margin.left + timeScale.x(time);
   const y = (value: number | null) => margin.top + valueScale.y(value);
   const gridColor = theme.colors.border.weak;
   const textColor = theme.colors.text.secondary;
-  const zoneFill = theme.colors.background.secondary;
+  const currentDayStart = Math.max(timeScale.domainStart, startOfLocalDay(timeScale.domainEnd));
+  const currentDayX = x(currentDayStart);
+  const currentDayWidth = Math.max(0, x(timeScale.domainEnd) - currentDayX);
+  const lineOpacity = clamp(resolvedOptions.lineOpacity, 0.1, 1);
+  const lineDash = getLineDash(resolvedOptions.lineStyle, resolvedOptions.lineWidth);
+  const toggleSeries = (seriesId: string) => {
+    setHiddenSeries((previous) => {
+      const next = new Set(previous);
+
+      if (next.has(seriesId)) {
+        next.delete(seriesId);
+      } else {
+        next.add(seriesId);
+      }
+
+      return next;
+    });
+  };
+  const handleLegendKeyDown = (event: KeyboardEvent<HTMLDivElement>, seriesId: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleSeries(seriesId);
+    }
+  };
 
   return (
     <div
@@ -215,18 +273,16 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
         xmlns="http://www.w3.org/2000/svg"
       >
         <g>
-          {resolvedOptions.showZoneBackgrounds &&
-            timeScale.zones.map((zone, index) => (
-              <rect
-                key={zone.id}
-                x={margin.left + zone.xStart}
-                y={margin.top}
-                width={zone.xEnd - zone.xStart}
-                height={plotHeight}
-                fill={zoneFill}
-                opacity={index % 2 === 0 ? 0.22 : 0.1}
-              />
-            ))}
+          {currentDayWidth > 0 && (
+            <rect
+              x={currentDayX}
+              y={margin.top}
+              width={currentDayWidth}
+              height={plotHeight}
+              fill={theme.colors.background.secondary}
+              opacity={0.38}
+            />
+          )}
 
           {valueScale.ticks.map((tick) => (
             <g key={tick.label}>
@@ -252,55 +308,29 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
                 y1={margin.top}
                 y2={margin.top + plotHeight}
                 stroke={gridColor}
-                strokeOpacity={marker.major ? 0.56 : 0.22}
+                strokeOpacity={marker.major ? 0.72 : 0.34}
               />
-              {marker.label && (
-                <text
-                  x={x(marker.time)}
-                  y={height - 7}
-                  fill={textColor}
-                  fontSize={11}
-                  textAnchor="middle"
-                >
-                  {marker.label}
-                </text>
-              )}
             </g>
           ))}
 
-          {timeScale.zones.slice(1).map((zone) => (
-            <line
-              key={zone.id}
-              x1={margin.left + zone.xStart}
-              x2={margin.left + zone.xStart}
-              y1={margin.top}
-              y2={margin.top + plotHeight}
-              stroke={theme.colors.border.medium}
-              strokeDasharray="3 4"
-              strokeOpacity={0.7}
-            />
-          ))}
+          {visibleSeries.map((item) => {
+            const seriesIndex = series.findIndex((seriesItem) => seriesItem.id === item.id);
+            const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, seriesIndex);
+            const path = buildStepPath(item.points, x, y);
 
-          {series.map((item, index) => {
-            const color = item.color ?? palette[index % palette.length];
-
-            return timeScale.zones.map((zone) => {
-              const zonePoints = pointsInZone(item.points, zone.id, timeScale);
-              const path = buildStepPath(zonePoints, x, y);
-
-              return path ? (
-                <path
-                  key={`${item.id}:${zone.id}`}
-                  d={path}
-                  fill="none"
-                  stroke={color}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeOpacity={zoneOpacity[zone.id]}
-                  strokeWidth={resolvedOptions.lineWidth}
-                />
-              ) : null;
-            });
+            return path ? (
+              <path
+                key={item.id}
+                d={path}
+                fill="none"
+                stroke={color}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={lineDash}
+                strokeOpacity={lineOpacity}
+                strokeWidth={resolvedOptions.lineWidth}
+              />
+            ) : null;
           })}
 
           <line
@@ -313,28 +343,71 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
         </g>
       </svg>
 
-      {legendWidth > 0 && (
+      {showLegend && (
         <div
           data-testid="context-compression-legend"
           className={styles.legend}
-          style={{ width: legendWidth, color: theme.colors.text.secondary }}
+          style={
+            showBottomLegend
+              ? {
+                  bottom: 4,
+                  color: theme.colors.text.secondary,
+                  left: margin.left,
+                  maxHeight: legendHeight - 6,
+                  right: 8,
+                }
+              : {
+                  color: theme.colors.text.secondary,
+                  right: 8,
+                  top: 8,
+                  width: legendWidth,
+                }
+          }
         >
           <div />
           <div className={styles.legendHeader}>Last</div>
           <div className={styles.legendHeader}>Max</div>
 
           {series.map((item, index) => {
-            const color = item.color ?? palette[index % palette.length];
+            const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, index);
             const stats = getSeriesStats(item.points);
+            const isHidden = hiddenSeries.has(item.id);
+            const toggleClassName = cx(styles.legendToggle, isHidden && styles.legendHidden);
 
             return (
               <React.Fragment key={item.id}>
-                <div className={styles.legendName} title={item.name}>
+                <div
+                  aria-pressed={!isHidden}
+                  className={cx(styles.legendName, toggleClassName)}
+                  onClick={() => toggleSeries(item.id)}
+                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
+                  role="button"
+                  tabIndex={0}
+                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
+                >
                   <span className={styles.legendSwatch} style={{ background: color }} />
                   <span className={styles.legendText}>{item.name}</span>
                 </div>
-                <div className={styles.legendValue}>{formatValue(stats.last)}</div>
-                <div className={styles.legendValue}>{formatValue(stats.max)}</div>
+                <div
+                  className={cx(styles.legendValue, toggleClassName)}
+                  onClick={() => toggleSeries(item.id)}
+                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
+                  role="button"
+                  tabIndex={0}
+                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
+                >
+                  {formatValue(stats.last)}
+                </div>
+                <div
+                  className={cx(styles.legendValue, toggleClassName)}
+                  onClick={() => toggleSeries(item.id)}
+                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
+                  role="button"
+                  tabIndex={0}
+                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
+                >
+                  {formatValue(stats.max)}
+                </div>
               </React.Fragment>
             );
           })}
@@ -343,4 +416,3 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
     </div>
   );
 };
-

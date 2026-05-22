@@ -26,20 +26,17 @@ function positive(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function normalizeWeights(values: number[]): number[] {
-  const cleanValues = values.map((value) => positive(value, 1));
-  const total = cleanValues.reduce((sum, value) => sum + value, 0);
-  return cleanValues.map((value) => value / total);
-}
+function createLogProjection(domainStart: number, domainEnd: number, width: number, focusMs: number) {
+  const totalAge = Math.max(1, domainEnd - domainStart);
+  const focus = Math.max(HOUR_MS, focusMs);
+  const denominator = Math.log1p(totalAge / focus);
 
-function projectWithinZone(time: number, zone: TimeZoneRange): number {
-  const duration = zone.end - zone.start;
-  if (duration <= 0) {
-    return zone.xStart;
-  }
-
-  const progress = (time - zone.start) / duration;
-  return zone.xStart + progress * (zone.xEnd - zone.xStart);
+  return (time: number): number => {
+    const clampedTime = Math.max(domainStart, Math.min(domainEnd, time));
+    const age = domainEnd - clampedTime;
+    const compressedAge = Math.log1p(age / focus) / denominator;
+    return width * (1 - compressedAge);
+  };
 }
 
 export function createNonlinearTimeScale(
@@ -55,14 +52,7 @@ export function createNonlinearTimeScale(
   const domainEnd = now;
   const historicalEnd = domainStart + historicalMs;
   const transitionEnd = historicalEnd + transitionMs;
-  const weights = normalizeWeights([
-    options.historicalWidthPercent,
-    options.transitionWidthPercent,
-    options.recentWidthPercent,
-  ]);
-
-  const historicalWidth = width * weights[0];
-  const transitionWidth = width * weights[1];
+  const project = createLogProjection(domainStart, domainEnd, width, recentMs / 6);
 
   const zones: TimeZoneRange[] = [
     {
@@ -70,24 +60,24 @@ export function createNonlinearTimeScale(
       label: 'Historical',
       start: domainStart,
       end: historicalEnd,
-      xStart: 0,
-      xEnd: historicalWidth,
+      xStart: project(domainStart),
+      xEnd: project(historicalEnd),
     },
     {
       id: 'transition',
       label: 'Transition',
       start: historicalEnd,
       end: transitionEnd,
-      xStart: historicalWidth,
-      xEnd: historicalWidth + transitionWidth,
+      xStart: project(historicalEnd),
+      xEnd: project(transitionEnd),
     },
     {
       id: 'recent',
       label: 'Recent',
       start: transitionEnd,
       end: domainEnd,
-      xStart: historicalWidth + transitionWidth,
-      xEnd: width,
+      xStart: project(transitionEnd),
+      xEnd: project(domainEnd),
     },
   ];
 
@@ -96,10 +86,7 @@ export function createNonlinearTimeScale(
     domainEnd,
     width,
     zones,
-    x: (time) => {
-      const clampedTime = Math.max(domainStart, Math.min(domainEnd, time));
-      return projectWithinZone(clampedTime, scale.zoneFor(clampedTime));
-    },
+    x: project,
     zoneFor: (time) => {
       if (time >= zones[2].start) {
         return zones[2];
@@ -115,4 +102,3 @@ export function createNonlinearTimeScale(
 
   return scale;
 }
-

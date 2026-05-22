@@ -19,36 +19,6 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
       name: 'Historical duration (hours)',
       defaultValue: defaultOptions.historicalDurationHours,
     })
-    .addNumberInput({
-      path: 'recentWidthPercent',
-      name: 'Recent width (%)',
-      defaultValue: defaultOptions.recentWidthPercent,
-    })
-    .addNumberInput({
-      path: 'transitionWidthPercent',
-      name: 'Transition width (%)',
-      defaultValue: defaultOptions.transitionWidthPercent,
-    })
-    .addNumberInput({
-      path: 'historicalWidthPercent',
-      name: 'Historical width (%)',
-      defaultValue: defaultOptions.historicalWidthPercent,
-    })
-    .addNumberInput({
-      path: 'recentBucketMinutes',
-      name: 'Recent bucket (minutes)',
-      defaultValue: defaultOptions.recentBucketMinutes,
-    })
-    .addNumberInput({
-      path: 'transitionBucketMinutes',
-      name: 'Transition bucket (minutes)',
-      defaultValue: defaultOptions.transitionBucketMinutes,
-    })
-    .addNumberInput({
-      path: 'historicalBucketMinutes',
-      name: 'Historical bucket (minutes)',
-      defaultValue: defaultOptions.historicalBucketMinutes,
-    })
     .addRadio({
       path: 'aggregationMode',
       defaultValue: defaultOptions.aggregationMode,
@@ -83,19 +53,87 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
         ],
       },
     })
+    .addRadio({
+      path: 'colorPalette',
+      defaultValue: defaultOptions.colorPalette,
+      name: 'Color palette',
+      settings: {
+        options: [
+          {
+            value: 'grafana',
+            label: 'Grafana',
+          },
+          {
+            value: 'classic',
+            label: 'Classic',
+          },
+          {
+            value: 'cool',
+            label: 'Cool',
+          },
+          {
+            value: 'warm',
+            label: 'Warm',
+          },
+        ],
+      },
+    })
     .addNumberInput({
       path: 'lineWidth',
       name: 'Line width',
       defaultValue: defaultOptions.lineWidth,
+    })
+    .addNumberInput({
+      path: 'lineOpacity',
+      name: 'Line opacity',
+      defaultValue: defaultOptions.lineOpacity,
+      settings: {
+        min: 0.1,
+        max: 1,
+        step: 0.05,
+      },
+    })
+    .addRadio({
+      path: 'lineStyle',
+      defaultValue: defaultOptions.lineStyle,
+      name: 'Line style',
+      settings: {
+        options: [
+          {
+            value: 'solid',
+            label: 'Solid',
+          },
+          {
+            value: 'dash',
+            label: 'Dash',
+          },
+          {
+            value: 'dot',
+            label: 'Dot',
+          },
+        ],
+      },
     })
     .addBooleanSwitch({
       path: 'showLegend',
       name: 'Show legend',
       defaultValue: defaultOptions.showLegend,
     })
-    .addBooleanSwitch({
-      path: 'showZoneBackgrounds',
-      name: 'Show zone backgrounds',
-      defaultValue: defaultOptions.showZoneBackgrounds,
+    .addRadio({
+      path: 'legendPlacement',
+      defaultValue: defaultOptions.legendPlacement,
+      name: 'Legend placement',
+      settings: {
+        options: [
+          {
+            value: 'right',
+            label: 'Right',
+          },
+          {
+            value: 'bottom',
+            label: 'Bottom',
+          },
+        ],
+      },
     });
 });

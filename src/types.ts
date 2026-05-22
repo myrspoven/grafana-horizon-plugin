@@ -1,38 +1,35 @@
 export type AggregationMode = 'max' | 'avg';
+export type ColorPalette = 'grafana' | 'classic' | 'cool' | 'warm';
+export type LegendPlacement = 'right' | 'bottom';
+export type LineStyle = 'solid' | 'dash' | 'dot';
 export type YScaleMode = 'linear' | 'log1p';
 
 export interface ContextCompressionOptions {
   recentDurationHours: number;
   transitionDurationHours: number;
   historicalDurationHours: number;
-  recentWidthPercent: number;
-  transitionWidthPercent: number;
-  historicalWidthPercent: number;
-  recentBucketMinutes: number;
-  transitionBucketMinutes: number;
-  historicalBucketMinutes: number;
   aggregationMode: AggregationMode;
+  colorPalette: ColorPalette;
+  legendPlacement: LegendPlacement;
+  lineOpacity: number;
+  lineStyle: LineStyle;
   yScaleMode: YScaleMode;
   lineWidth: number;
   showLegend: boolean;
-  showZoneBackgrounds: boolean;
 }
 
 export const defaultOptions: ContextCompressionOptions = {
   recentDurationHours: 6,
   transitionDurationHours: 18,
   historicalDurationHours: 144,
-  recentWidthPercent: 65,
-  transitionWidthPercent: 20,
-  historicalWidthPercent: 15,
-  recentBucketMinutes: 1,
-  transitionBucketMinutes: 5,
-  historicalBucketMinutes: 30,
   aggregationMode: 'max',
+  colorPalette: 'grafana',
+  legendPlacement: 'right',
+  lineOpacity: 0.95,
+  lineStyle: 'solid',
   yScaleMode: 'log1p',
   lineWidth: 1.5,
   showLegend: true,
-  showZoneBackgrounds: true,
 };
 
 export function resolveOptions(options: Partial<ContextCompressionOptions>): ContextCompressionOptions {

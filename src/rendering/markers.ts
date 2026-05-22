@@ -1,72 +1,76 @@
-import { NonlinearTimeScale, TimeZoneRange } from '../scales/nonlinearTime';
+import { NonlinearTimeScale } from '../scales/nonlinearTime';
 
 export interface TemporalMarker {
   time: number;
   x: number;
-  label?: string;
   major: boolean;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-function alignToStep(time: number, step: number): number {
-  return Math.ceil(time / step) * step;
-}
-
-function isMidnight(time: number): boolean {
+function startOfLocalDay(time: number): number {
   const date = new Date(time);
-  return date.getHours() === 0 && date.getMinutes() === 0;
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
 }
 
-function markerStep(zone: TimeZoneRange): number {
-  if (zone.id === 'recent') {
-    return HOUR_MS;
-  }
-
-  if (zone.id === 'transition') {
-    return 6 * HOUR_MS;
-  }
-
-  return DAY_MS;
-}
-
-function formatMarker(time: number, major: boolean): string {
+function nextLocalHour(time: number): number {
   const date = new Date(time);
-
-  if (major) {
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
-
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  date.setMinutes(0, 0, 0);
+  const aligned = date.getTime();
+  return aligned < time ? aligned + HOUR_MS : aligned;
 }
 
-export function generateTemporalMarkers(scale: NonlinearTimeScale, minLabelSpacing = 56): TemporalMarker[] {
+function nextLocalDay(time: number): number {
+  const dayStart = startOfLocalDay(time);
+  return dayStart < time ? dayStart + DAY_MS : dayStart;
+}
+
+export function generateTemporalMarkers(scale: NonlinearTimeScale): TemporalMarker[] {
   const markers: TemporalMarker[] = [];
-  let lastLabelX = Number.NEGATIVE_INFINITY;
+  const todayStart = startOfLocalDay(scale.domainEnd);
+  const dailyEnd = Math.min(scale.domainEnd, todayStart - 1);
 
-  for (const zone of scale.zones) {
-    const step = markerStep(zone);
-
-    for (let time = alignToStep(zone.start, step); time <= zone.end; time += step) {
-      const x = scale.x(time);
-      const major = isMidnight(time) || zone.id === 'historical';
-      const shouldLabel = x - lastLabelX >= minLabelSpacing || major;
-      const label = shouldLabel ? formatMarker(time, major) : undefined;
-
-      if (label) {
-        lastLabelX = x;
-      }
-
-      markers.push({
-        time,
-        x,
-        label,
-        major,
-      });
-    }
+  for (let time = nextLocalDay(scale.domainStart); time <= dailyEnd; time += DAY_MS) {
+    markers.push({
+      time,
+      x: scale.x(time),
+      major: true,
+    });
   }
 
-  return markers;
-}
+  for (let time = nextLocalHour(Math.max(scale.domainStart, todayStart)); time <= scale.domainEnd; time += HOUR_MS) {
+    const date = new Date(time);
 
+    markers.push({
+      time,
+      x: scale.x(time),
+      major: date.getHours() === 0,
+    });
+  }
+
+  if (markers.length === 0 || markers[0].time !== scale.domainStart) {
+    markers.unshift({
+      time: scale.domainStart,
+      x: scale.x(scale.domainStart),
+      major: true,
+    });
+  }
+
+  if (markers[markers.length - 1].time !== scale.domainEnd) {
+    markers.push({
+      time: scale.domainEnd,
+      x: scale.x(scale.domainEnd),
+      major: true,
+    });
+  }
+
+  return markers.filter((marker, index) => {
+    if (index === 0) {
+      return true;
+    }
+
+    return Math.abs(marker.x - markers[index - 1].x) >= 1;
+  });
+}
