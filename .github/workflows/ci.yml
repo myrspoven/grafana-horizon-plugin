@@ -23,6 +23,7 @@ jobs:
       has-backend: ${{ steps.check-for-backend.outputs.has-backend }}
     env:
       GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+      GRAFANA_SIGN_ROOT_URLS: https://grafana.myrspoven.se/
     steps:
       - uses: actions/checkout@v6
         with:
@@ -89,7 +90,7 @@ jobs:
           fi
 
       - name: Sign plugin
-        run: npm run sign
+        run: npm run sign -- --rootUrls "$GRAFANA_SIGN_ROOT_URLS"
         if: ${{ env.GRAFANA_ACCESS_POLICY_TOKEN != '' }}
 
       - name: Get plugin metadata
