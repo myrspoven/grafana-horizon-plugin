@@ -22,5 +22,7 @@ jobs:
       - uses: grafana/plugin-actions/build-plugin@main
         with:
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          sign_root_urls: https://grafana.myrspoven.se
+          node-version: '22'
           attestation: true
           use_changelog_generator: true
