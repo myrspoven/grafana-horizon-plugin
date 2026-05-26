@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || github.ref }}
 
-      - uses: grafana/plugin-actions/build-plugin@main
+      - uses: grafana/plugin-actions/build-plugin@build-plugin/v1.2.0
         with:
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           sign_root_urls: https://grafana.myrspoven.se/
