@@ -26,10 +26,73 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || github.ref }}
 
-      - uses: grafana/plugin-actions/build-plugin@build-plugin/v1.2.0
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v6
         with:
-          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
-          sign_root_urls: https://grafana.myrspoven.se/
           node-version: '22'
-          attestation: true
-          use_changelog_generator: true
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Sign plugin
+        run: npm run sign -- --rootUrls https://grafana.myrspoven.se/
+        env:
+          GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+
+      - name: Package plugin
+        id: package
+        shell: bash
+        run: |
+          plugin_id="$(node -p "require('./dist/plugin.json').id")"
+          plugin_version="$(node -p "require('./dist/plugin.json').info.version")"
+          archive="${plugin_id}-${plugin_version}.zip"
+          mv dist "$plugin_id"
+          zip -r "$archive" "$plugin_id"
+          sha1sum "$archive" > "${archive}.sha1"
+          echo "plugin_id=$plugin_id" >> "$GITHUB_OUTPUT"
+          echo "plugin_version=$plugin_version" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Check plugin metadata
+        shell: bash
+        run: |
+          docker run --pull=always \
+            -v "$PWD/${ARCHIVE}:/archive.zip" \
+            grafana/plugin-validator-cli -analyzer=metadatavalid /archive.zip
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v${PLUGIN_VERSION}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          PLUGIN_VERSION: ${{ steps.package.outputs.plugin_version }}
+
+      - name: Create or update draft release
+        shell: bash
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          archive="${{ steps.package.outputs.archive }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$archive" "${archive}.sha1" --clobber
+          else
+            gh release create "$tag" "$archive" "${archive}.sha1" \
+              --draft \
+              --target "${{ steps.release.outputs.source_sha }}" \
+              --title "$tag" \
+              --notes "Draft release for ${{ steps.package.outputs.plugin_id }} ${{ steps.package.outputs.plugin_version }}."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
