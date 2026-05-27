@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v_x*'
   workflow_dispatch:
     inputs:
       ref:

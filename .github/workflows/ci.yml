@@ -3,12 +3,17 @@ name: CI
 on:
   push:
     branches:
-      - master
-      - main
+      - main_x
   pull_request:
     branches:
-      - master
-      - main
+      - main_x
+
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build, for example main or v0.0.2. Leave empty to use the selected ref.'
+        required: false
+        type: string
 
 env:
   # Temporarily disabled while preparing the first production-ready release.
