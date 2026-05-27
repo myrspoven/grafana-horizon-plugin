@@ -1,4 +1,4 @@
-import { DataFrame, Field, FieldType, PanelData } from '@grafana/data';
+import { DataFrame, Field, FieldType, PanelData, ThresholdsConfig } from '@grafana/data';
 
 export interface TimeSeriesPoint {
   time: number;
@@ -11,6 +11,7 @@ export interface TimeSeries {
   color?: string;
   labels?: Record<string, string>;
   points: TimeSeriesPoint[];
+  thresholds?: ThresholdsConfig;
 }
 
 function readValue(values: unknown, index: number): unknown {
@@ -107,10 +108,10 @@ export function extractTimeSeries(data: PanelData): TimeSeries[] {
         color: getSeriesColor(valueField),
         labels: valueField.labels,
         points,
+        thresholds: valueField.config.thresholds,
       });
     }
   }
 
   return series;
 }
-

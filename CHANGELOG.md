@@ -6,7 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- Grafana field config support for per-series color overrides and thresholds.
+- Fill opacity and gradient mode panel options for area styling.
+- Optional dashed threshold lines rendered from Grafana field thresholds.
+- Y-axis lower bound option for zero-based or visible-minimum scaling.
+- Alternating day background bands across the nonlinear timeline.
+- Nonlinear grid markers and day bands now follow Grafana's selected time range.
 
 ## [0.0.1] - 2026-05-25
 

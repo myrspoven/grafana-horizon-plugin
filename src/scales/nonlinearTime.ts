@@ -42,14 +42,19 @@ function createLogProjection(domainStart: number, domainEnd: number, width: numb
 export function createNonlinearTimeScale(
   options: ContextCompressionOptions,
   width: number,
-  now: number
+  domainStartInput: number,
+  domainEndInput: number
 ): NonlinearTimeScale {
   const recentMs = positive(options.recentDurationHours, 6) * HOUR_MS;
   const transitionMs = positive(options.transitionDurationHours, 18) * HOUR_MS;
   const historicalMs = positive(options.historicalDurationHours, 144) * HOUR_MS;
   const totalMs = recentMs + transitionMs + historicalMs;
-  const domainStart = now - totalMs;
-  const domainEnd = now;
+  const safeDomainEnd = Number.isFinite(domainEndInput) ? domainEndInput : Date.now();
+  const fallbackDomainStart = safeDomainEnd - totalMs;
+  const requestedDomainStart = Number.isFinite(domainStartInput) ? domainStartInput : fallbackDomainStart;
+  const domainEnd = Math.max(safeDomainEnd, requestedDomainStart + 1);
+  const domainStart = Math.min(requestedDomainStart, domainEnd - 1);
+  const domainMs = domainEnd - domainStart;
   const historicalEnd = domainStart + historicalMs;
   const transitionEnd = historicalEnd + transitionMs;
   const project = createLogProjection(domainStart, domainEnd, width, recentMs / 6);
@@ -59,24 +64,24 @@ export function createNonlinearTimeScale(
       id: 'historical',
       label: 'Historical',
       start: domainStart,
-      end: historicalEnd,
+      end: Math.min(domainEnd, historicalEnd),
       xStart: project(domainStart),
-      xEnd: project(historicalEnd),
+      xEnd: project(Math.min(domainEnd, historicalEnd)),
     },
     {
       id: 'transition',
       label: 'Transition',
-      start: historicalEnd,
-      end: transitionEnd,
-      xStart: project(historicalEnd),
-      xEnd: project(transitionEnd),
+      start: Math.min(domainEnd, historicalEnd),
+      end: Math.min(domainEnd, transitionEnd),
+      xStart: project(Math.min(domainEnd, historicalEnd)),
+      xEnd: project(Math.min(domainEnd, transitionEnd)),
     },
     {
       id: 'recent',
       label: 'Recent',
-      start: transitionEnd,
+      start: Math.min(domainEnd, Math.max(domainStart, domainEnd - Math.min(recentMs, domainMs))),
       end: domainEnd,
-      xStart: project(transitionEnd),
+      xStart: project(Math.min(domainEnd, Math.max(domainStart, domainEnd - Math.min(recentMs, domainMs)))),
       xEnd: project(domainEnd),
     },
   ];

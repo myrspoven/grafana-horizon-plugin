@@ -7,6 +7,7 @@ export interface ValueTick {
 }
 
 export interface ValueScale {
+  min: number;
   max: number;
   mode: YScaleMode;
   y: (value: number | null) => number;
@@ -25,20 +26,23 @@ function log1p(value: number): number {
   return Math.log10(Math.max(0, value) + 1);
 }
 
-function linearTicks(max: number, height: number, y: (value: number) => number): ValueTick[] {
-  const safeMax = max <= 0 ? 1 : max;
-  const step = safeMax / 4;
+function linearTicks(min: number, max: number, y: (value: number) => number): ValueTick[] {
+  const step = (max - min) / 4;
 
-  return [0, step, step * 2, step * 3, safeMax].map((value) => ({
+  return [min, min + step, min + step * 2, min + step * 3, max].map((value) => ({
     value,
     y: y(value),
     label: formatTick(Math.round(value)),
   }));
 }
 
-function logTicks(max: number, y: (value: number) => number): ValueTick[] {
+function logTicks(min: number, max: number, y: (value: number) => number): ValueTick[] {
   const candidates = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000];
-  const ticks = candidates.filter((value) => value <= max);
+  const ticks = candidates.filter((value) => value >= min && value <= max);
+
+  if (ticks[0] !== min) {
+    ticks.unshift(min);
+  }
 
   if (ticks[ticks.length - 1] !== max) {
     ticks.push(max);
@@ -69,33 +73,40 @@ function removeCrowdedTicks(ticks: ValueTick[], minPixelSpacing = 16): ValueTick
   }, []);
 }
 
-export function createValueScale(maxValue: number, height: number, mode: YScaleMode): ValueScale {
-  const max = Math.max(1, maxValue);
+export function createValueScale(minValue: number, maxValue: number, height: number, mode: YScaleMode): ValueScale {
+  const min = Math.max(0, Math.min(minValue, maxValue));
+  const max = Math.max(min + 1, maxValue);
 
   if (mode === 'log1p') {
+    const transformedMin = log1p(min);
     const transformedMax = log1p(max);
+    const transformedRange = Math.max(Number.EPSILON, transformedMax - transformedMin);
     const y = (value: number | null) => {
-      const transformed = value === null ? 0 : log1p(value);
-      return height - (transformed / transformedMax) * height;
+      const safeValue = value === null ? min : Math.max(min, value);
+      const transformed = log1p(safeValue);
+      return height - ((transformed - transformedMin) / transformedRange) * height;
     };
 
     return {
+      min,
       max,
       mode,
       y,
-      ticks: logTicks(max, y),
+      ticks: logTicks(min, max, y),
     };
   }
 
+  const range = Math.max(1, max - min);
   const y = (value: number | null) => {
-    const safeValue = value === null ? 0 : Math.max(0, value);
-    return height - (safeValue / max) * height;
+    const safeValue = value === null ? min : Math.max(min, value);
+    return height - ((safeValue - min) / range) * height;
   };
 
   return {
+    min,
     max,
     mode,
     y,
-    ticks: linearTicks(max, height, y),
+    ticks: linearTicks(min, max, y),
   };
 }

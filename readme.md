@@ -11,10 +11,12 @@ It renders a continuous nonlinear time axis using a `log1p(age)` projection: rec
 - Multiple numeric time series from Grafana data frames, including Prometheus query results.
 - Configurable aggregation mode: max or average.
 - Linear or zero-safe `log1p` Y-axis.
+- Optional Y-axis lower bound at zero or the smallest visible series value.
 - Hourly vertical markers for the current day and daily markers for older history.
-- Slight current-day background emphasis.
-- Grafana-aware series colors with palette fallback.
-- Legend placement, line width, line opacity, and line style options.
+- Alternating day background bands for easier temporal scanning.
+- Grafana field color overrides with palette fallback.
+- Legend placement, line width, line opacity, fill opacity, gradient mode, and line style options.
+- Grafana field thresholds rendered as optional dashed threshold lines.
 - Clickable legend rows for temporarily showing or hiding series.
 
 ## Status
@@ -68,12 +70,17 @@ Add the **Horizon** visualization to a Grafana panel and query any data source t
 
 Useful options:
 
-- **Horizon** controls how far back the panel considers data for the compressed view.
+- The Grafana dashboard time range controls how far back the panel renders data.
+- **Recent duration** controls the compression focus, so the latest part of the selected range receives the most horizontal space.
 - **Aggregation** chooses max or average for automatic buckets.
 - **Y-axis scale** switches between linear and `log1p`.
+- **Y-axis lower bound** keeps the baseline at zero or at the visible series minimum.
 - **Palette** controls fallback colors when Grafana field colors are not set.
 - **Legend placement** moves the legend to the right or bottom.
-- **Line style**, **line width**, and **line opacity** tune the rendering.
+- **Line style**, **line width**, **line opacity**, **fill opacity**, and **gradient mode** tune the rendering.
+- **Show thresholds** renders Grafana field thresholds as dashed horizontal lines.
+
+Series-specific colors are configured with Grafana field overrides: add an override for a field, choose **Standard options > Color scheme**, and set a single color. Thresholds use Grafana's standard field threshold editor.
 
 Legend clicks hide or show a series within the panel. This is local display state and does not change the Grafana query.
 

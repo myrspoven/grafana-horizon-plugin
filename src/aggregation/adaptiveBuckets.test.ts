@@ -3,16 +3,18 @@ import { createNonlinearTimeScale } from '../scales/nonlinearTime';
 import { defaultOptions } from '../types';
 
 const now = Date.UTC(2021, 0, 8, 6);
+const hour = 60 * 60 * 1000;
 const options = {
   ...defaultOptions,
   recentDurationHours: 6,
   transitionDurationHours: 6,
   historicalDurationHours: 6,
 };
+const rangeStart = now - 18 * hour;
 
 describe('aggregateSeries', () => {
   it('preserves the maximum value per bucket when max aggregation is selected', () => {
-    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 2, now);
+    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 2, rangeStart, now);
     const result = aggregateSeries(
       [
         {
@@ -34,7 +36,7 @@ describe('aggregateSeries', () => {
   });
 
   it('averages bucket values when average aggregation is selected', () => {
-    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'avg' }, 2, now);
+    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'avg' }, 2, rangeStart, now);
     const result = aggregateSeries(
       [
         {
@@ -56,8 +58,7 @@ describe('aggregateSeries', () => {
   });
 
   it('aggregates older data into wider real-time buckets', () => {
-    const scale = createNonlinearTimeScale(options, 240, now);
-    const hour = 60 * 60 * 1000;
+    const scale = createNonlinearTimeScale(options, 240, rangeStart, now);
     const tenMinutes = 10 * 60 * 1000;
     const inputPoints = Array.from({ length: 109 }, (_, index) => ({
       time: now - (108 - index) * tenMinutes,
