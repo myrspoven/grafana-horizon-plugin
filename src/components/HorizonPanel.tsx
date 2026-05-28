@@ -4,20 +4,28 @@ import { css, cx } from '@emotion/css';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 
 import { aggregateSeries } from '../aggregation/adaptiveBuckets';
-import { extractTimeSeries, TimeSeries, TimeSeriesPoint } from '../data/extractSeries';
+import {
+  extractTimeSeries,
+  StandardLineStyle,
+  StandardTimeSeriesFieldConfig,
+  TimeSeries,
+  TimeSeriesPoint,
+} from '../data/extractSeries';
 import { createNonlinearTimeScale } from '../scales/nonlinearTime';
 import { createValueScale } from '../scales/valueScale';
 import { generateTemporalMarkers } from '../rendering/markers';
+import { generateTemporalLabels } from '../rendering/timeLabels';
 import {
   ColorPalette,
-  ContextCompressionOptions,
   GradientMode,
+  HorizonOptions,
+  LegendSortMode,
   LineInterpolation,
-  LineStyle,
+  PointVisibility,
   resolveOptions,
 } from '../types';
 
-interface Props extends PanelProps<ContextCompressionOptions> {}
+interface Props extends PanelProps<HorizonOptions> {}
 
 interface SeriesStats {
   last: number | null;
@@ -37,7 +45,36 @@ interface DayBand {
   end: number;
 }
 
+interface ResolvedSeriesStyle {
+  barMaxWidth?: number;
+  barWidthFactor: number;
+  drawStyle: 'bars' | 'line' | 'points';
+  fillOpacity: number;
+  gradientMode: GradientMode;
+  lineDash?: string;
+  lineInterpolation: LineInterpolation;
+  lineOpacity: number;
+  lineWidth: number;
+  pointSize: number;
+  pointVisibility: PointVisibility;
+  spanNulls: boolean;
+}
+
 type Theme2 = ReturnType<typeof useTheme2>;
+
+const defaultGraphStyle = {
+  barMaxWidth: 18,
+  barWidthFactor: 0.6,
+  drawStyle: 'line',
+  fillOpacity: 0,
+  gradientMode: 'none',
+  lineInterpolation: 'stepAfter',
+  lineWidth: 1.5,
+  pointSize: 4,
+  showPoints: 'auto',
+  spanNulls: true,
+  stackingMode: 'none',
+} as const;
 
 const palettes: Record<ColorPalette, string[]> = {
   grafana: ['#b877d9', '#8f7bd1', '#73bf69', '#f2495c', '#ff9830', '#5794f2', '#fade2a', '#7eb6ff'],
@@ -156,6 +193,22 @@ function getMinValue(series: TimeSeries[]): number {
   return Math.max(0, Math.min(...values));
 }
 
+function getSoftMin(series: TimeSeries[]): number | undefined {
+  const values = series
+    .map((item) => item.fieldConfig?.axisSoftMin)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  return values.length > 0 ? Math.min(...values) : undefined;
+}
+
+function getSoftMax(series: TimeSeries[]): number | undefined {
+  const values = series
+    .map((item) => item.fieldConfig?.axisSoftMax)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  return values.length > 0 ? Math.max(...values) : undefined;
+}
+
 function getSeriesStats(points: TimeSeriesPoint[]): SeriesStats {
   const values = points.map((point) => point.value).filter((value): value is number => value !== null);
 
@@ -167,6 +220,91 @@ function getSeriesStats(points: TimeSeriesPoint[]): SeriesStats {
     last: values[values.length - 1],
     max: Math.max(...values),
   };
+}
+
+function splitRenderableSegments(points: TimeSeriesPoint[], connectNulls: boolean): TimeSeriesPoint[][] {
+  if (connectNulls) {
+    const connectedPoints = points.filter((point) => point.value !== null);
+    return connectedPoints.length > 0 ? [connectedPoints] : [];
+  }
+
+  const segments: TimeSeriesPoint[][] = [];
+  let currentSegment: TimeSeriesPoint[] = [];
+
+  for (const point of points) {
+    if (point.value === null) {
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+        currentSegment = [];
+      }
+
+      continue;
+    }
+
+    currentSegment.push(point);
+  }
+
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+
+  return segments;
+}
+
+function compareNullableDesc(left: number | null, right: number | null): number {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return right - left;
+}
+
+function sortLegendSeries(series: TimeSeries[], mode: LegendSortMode): TimeSeries[] {
+  if (mode === 'original') {
+    return series;
+  }
+
+  return [...series].sort((left, right) => {
+    if (mode === 'alphabetical') {
+      return left.name.localeCompare(right.name);
+    }
+
+    const leftStats = getSeriesStats(left.points);
+    const rightStats = getSeriesStats(right.points);
+    const lastComparison = compareNullableDesc(leftStats.last, rightStats.last);
+
+    if (lastComparison !== 0) {
+      return lastComparison;
+    }
+
+    const maxComparison = compareNullableDesc(leftStats.max, rightStats.max);
+
+    if (maxComparison !== 0) {
+      return maxComparison;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function shouldRenderSeriesPoints(mode: PointVisibility, points: TimeSeriesPoint[], plotWidth: number): boolean {
+  if (mode === 'always') {
+    return true;
+  }
+
+  if (mode === 'never') {
+    return false;
+  }
+
+  return points.filter((point) => point.value !== null).length <= Math.max(24, plotWidth / 4);
 }
 
 function buildLinePath(
@@ -235,6 +373,18 @@ function clamp(value: number, min: number, max: number): number {
 function getPaletteColor(paletteName: ColorPalette, index: number): string {
   const colors = palettes[paletteName] ?? palettes.grafana;
   return colors[index % colors.length];
+}
+
+function getSeriesLineColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
+  return item.color ?? item.fieldConfig?.lineColor ?? getPaletteColor(paletteName, seriesIndex);
+}
+
+function getSeriesFillColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
+  return item.fieldConfig?.fillColor ?? getSeriesLineColor(item, paletteName, seriesIndex);
+}
+
+function getSeriesPointColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
+  return item.fieldConfig?.pointColor ?? getSeriesLineColor(item, paletteName, seriesIndex);
 }
 
 function getThemeColor(theme: Theme2, color: string): string {
@@ -326,16 +476,124 @@ function getThresholdLines(series: TimeSeries[], minValue: number, maxValue: num
   return Array.from(lines.values()).sort((a, b) => b.value - a.value);
 }
 
-function getLineDash(style: LineStyle, lineWidth: number): string | undefined {
-  if (style === 'dash') {
+function getCustomLineDash(style: StandardLineStyle | undefined, lineWidth: number): string | undefined {
+  if (!style) {
+    return undefined;
+  }
+
+  if (Array.isArray(style.dash) && style.dash.length > 0) {
+    return style.dash.join(' ');
+  }
+
+  if (style.fill === 'dash') {
     return `${Math.max(4, lineWidth * 4)} ${Math.max(3, lineWidth * 3)}`;
   }
 
-  if (style === 'dot') {
+  if (style.fill === 'dot' || style.fill === 'square') {
     return `${Math.max(1, lineWidth)} ${Math.max(3, lineWidth * 3)}`;
   }
 
   return undefined;
+}
+
+function getResolvedSeriesStyle(
+  fieldConfig: StandardTimeSeriesFieldConfig | undefined,
+  options: HorizonOptions,
+  plotWidth: number,
+  points: TimeSeriesPoint[]
+): ResolvedSeriesStyle {
+  const lineWidth = clamp(fieldConfig?.lineWidth ?? defaultGraphStyle.lineWidth, 0, 10);
+  const drawStyle = fieldConfig?.drawStyle ?? defaultGraphStyle.drawStyle;
+  const pointVisibility = fieldConfig?.showPoints ?? defaultGraphStyle.showPoints;
+  const drawStylePointVisibility = drawStyle === 'points' ? 'always' : pointVisibility;
+  const lineOpacity = clamp(options.lineOpacity, 0, 1);
+  const spanNulls = fieldConfig?.spanNulls;
+
+  return {
+    barMaxWidth: fieldConfig?.barMaxWidth ?? defaultGraphStyle.barMaxWidth,
+    barWidthFactor: clamp(fieldConfig?.barWidthFactor ?? defaultGraphStyle.barWidthFactor, 0.05, 1),
+    drawStyle,
+    fillOpacity: clamp(fieldConfig?.fillOpacity ?? defaultGraphStyle.fillOpacity, 0, 100) / 100,
+    gradientMode: fieldConfig?.gradientMode ?? defaultGraphStyle.gradientMode,
+    lineDash: getCustomLineDash(fieldConfig?.lineStyle, lineWidth),
+    lineInterpolation: fieldConfig?.lineInterpolation ?? defaultGraphStyle.lineInterpolation,
+    lineOpacity,
+    lineWidth: drawStyle === 'points' ? 0 : lineWidth,
+    pointSize: clamp(fieldConfig?.pointSize ?? defaultGraphStyle.pointSize, 1.5, 12),
+    pointVisibility: shouldRenderSeriesPoints(drawStylePointVisibility, points, plotWidth) ? 'always' : 'never',
+    spanNulls: typeof spanNulls === 'undefined' ? defaultGraphStyle.spanNulls : Boolean(spanNulls),
+  };
+}
+
+function getStackingMode(item: TimeSeries): 'none' | 'normal' | 'percent' {
+  return item.fieldConfig?.stacking?.mode ?? defaultGraphStyle.stackingMode;
+}
+
+function getStackingGroup(item: TimeSeries): string {
+  return item.fieldConfig?.stacking?.group ?? '__default';
+}
+
+function hasThresholdLines(item: TimeSeries): boolean {
+  const fieldMode = item.fieldConfig?.thresholdsStyle?.mode;
+
+  if (fieldMode) {
+    return fieldMode === 'line' || fieldMode === 'line+area';
+  }
+
+  return false;
+}
+
+function stackRenderableSeries(series: TimeSeries[]): TimeSeries[] {
+  const percentTotals = new Map<string, number>();
+
+  for (const item of series) {
+    if (getStackingMode(item) !== 'percent') {
+      continue;
+    }
+
+    const group = getStackingGroup(item);
+
+    for (const point of item.points) {
+      if (point.value === null) {
+        continue;
+      }
+
+      const key = `${group}:${point.time}`;
+      percentTotals.set(key, (percentTotals.get(key) ?? 0) + point.value);
+    }
+  }
+
+  const runningTotals = new Map<string, number>();
+
+  return series.map((item) => {
+    const stackingMode = getStackingMode(item);
+
+    if (stackingMode === 'none') {
+      return item;
+    }
+
+    const group = getStackingGroup(item);
+
+    return {
+      ...item,
+      points: item.points.map((point) => {
+        if (point.value === null) {
+          return point;
+        }
+
+        const key = `${group}:${point.time}`;
+        const stackInput =
+          stackingMode === 'percent' ? (point.value / Math.max(percentTotals.get(key) ?? 0, 1)) * 100 : point.value;
+        const stackedValue = (runningTotals.get(key) ?? 0) + stackInput;
+        runningTotals.set(key, stackedValue);
+
+        return {
+          ...point,
+          value: stackedValue,
+        };
+      }),
+    };
+  });
 }
 
 function startOfLocalDay(time: number): number {
@@ -380,7 +638,7 @@ function getSafeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
-export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width, height, timeRange }) => {
+export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, timeRange }) => {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
   const resolvedOptions = resolveOptions(options);
@@ -411,14 +669,23 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
   const showLegend = showRightLegend || showBottomLegend;
   const legendWidth = showRightLegend ? Math.min(250, Math.max(190, width * 0.28)) : 0;
   const legendHeight = showBottomLegend ? Math.min(120, Math.max(44, 24 + rawSeries.length * 18)) : 0;
-  const margin = { top: 14, right: legendWidth + 14, bottom: 24 + legendHeight, left: 36 };
+  const xAxisLabelHeight = resolvedOptions.showXAxisLabels ? 16 : 0;
+  const margin = { top: 14, right: legendWidth + 14, bottom: 24 + xAxisLabelHeight + legendHeight, left: 36 };
   const plotWidth = Math.max(1, width - margin.left - margin.right);
   const plotHeight = Math.max(1, height - margin.top - margin.bottom);
   const rangeStart = timeRange.from.valueOf();
   const rangeEnd = timeRange.to.valueOf();
   const timeScale = createNonlinearTimeScale(resolvedOptions, plotWidth, rangeStart, rangeEnd);
   const series = aggregateSeries(rawSeries, timeScale, resolvedOptions);
+  const seriesIndexById = new Map(series.map((item, index) => [item.id, index]));
+  const visibleRawSeries = rawSeries.filter((item) => !hiddenSeries.has(item.id));
   const visibleSeries = series.filter((item) => !hiddenSeries.has(item.id));
+  const renderRawSeries = stackRenderableSeries(visibleRawSeries.filter((item) => !item.fieldConfig?.hideFrom?.viz));
+  const renderSeries = aggregateSeries(renderRawSeries, timeScale, resolvedOptions);
+  const legendSeries = sortLegendSeries(
+    series.filter((item) => !item.fieldConfig?.hideFrom?.legend),
+    resolvedOptions.legendSortMode
+  );
 
   if (series.length === 0) {
     return (
@@ -438,22 +705,32 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
     );
   }
 
-  const minValue = resolvedOptions.yAxisLowerBound === 'seriesMin' ? getMinValue(visibleSeries) : 0;
-  const valueScale = createValueScale(minValue, getMaxValue(visibleSeries), plotHeight, resolvedOptions.yScaleMode);
+  const seriesMinValue = resolvedOptions.yAxisLowerBound === 'seriesMin' ? getMinValue(renderSeries) : 0;
+  const softMin = getSoftMin(renderSeries);
+  const softMax = getSoftMax(renderSeries);
+  const minValue = softMin === undefined ? seriesMinValue : Math.min(seriesMinValue, softMin);
+  const maxValue = Math.max(getMaxValue(renderSeries), softMax ?? Number.NEGATIVE_INFINITY);
+  const valueScale = createValueScale(minValue, maxValue, plotHeight, resolvedOptions.yScaleMode);
   const temporalMarkers = generateTemporalMarkers(timeScale);
+  const temporalLabels = resolvedOptions.showXAxisLabels ? generateTemporalLabels(timeScale) : [];
   const x = (time: number) => margin.left + timeScale.x(time);
   const y = (value: number | null) => margin.top + valueScale.y(value);
   const gridColor = theme.colors.border.weak;
   const textColor = theme.colors.text.secondary;
   const dayBands = getAlternatingDayBands(timeScale.domainStart, timeScale.domainEnd);
-  const lineOpacity = clamp(resolvedOptions.lineOpacity, 0, 1);
-  const fillOpacity = clamp(resolvedOptions.fillOpacity, 0, 100) / 100;
-  const lineDash = getLineDash(resolvedOptions.lineStyle, resolvedOptions.lineWidth);
-  const shouldFill = fillOpacity > 0;
-  const effectiveFillOpacity = shouldFill ? fillOpacity : 0;
+  const dayBandColor = theme.colors.emphasize(theme.colors.background.secondary, 0.08);
+  const dayBandOpacity = clamp(resolvedOptions.dayBandOpacity, 0, 100) / 100;
+  const shouldFill = renderSeries.some((item) => {
+    return getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points).fillOpacity > 0;
+  });
   const thresholdLines =
-    resolvedOptions.thresholdDisplay === 'lines'
-      ? getThresholdLines(visibleSeries, valueScale.min, valueScale.max, theme)
+    visibleSeries.some((item) => hasThresholdLines(item))
+      ? getThresholdLines(
+          visibleSeries.filter((item) => hasThresholdLines(item)),
+          valueScale.min,
+          valueScale.max,
+          theme
+        )
       : [];
   const toggleSeries = (seriesId: string) => {
     setHiddenSeries((previous) => {
@@ -496,14 +773,15 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
       >
         {shouldFill && (
           <defs>
-            {visibleSeries.map((item) => {
-              const seriesIndex = series.findIndex((seriesItem) => seriesItem.id === item.id);
-              const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, seriesIndex);
+            {renderSeries.map((item) => {
+              const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+              const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
+              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
               const gradientId = `horizon-fill-${getSafeId(item.id)}`;
               const stops = getGradientStops(
-                resolvedOptions.gradientMode === 'none' ? 'opacity' : resolvedOptions.gradientMode,
+                style.gradientMode === 'none' ? 'opacity' : style.gradientMode,
                 color,
-                effectiveFillOpacity,
+                style.fillOpacity,
                 resolvedOptions.colorPalette,
                 seriesIndex
               );
@@ -539,8 +817,8 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
                 y={margin.top}
                 width={bandWidth}
                 height={plotHeight}
-                fill={theme.colors.background.secondary}
-                opacity={0.32}
+                fill={dayBandColor}
+                opacity={dayBandOpacity}
               />
             ) : null;
           })}
@@ -575,47 +853,118 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
           ))}
 
           {shouldFill &&
-            visibleSeries.map((item) => {
-              const seriesIndex = series.findIndex((seriesItem) => seriesItem.id === item.id);
-              const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, seriesIndex);
-              const areaPath = buildStepAreaPath(
-                item.points,
-                x,
-                y,
-                margin.top + plotHeight,
-                resolvedOptions.lineInterpolation
-              );
+            renderSeries.map((item) => {
+              const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+              const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
+              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
               const gradientId = `horizon-fill-${getSafeId(item.id)}`;
+              const segments = style.fillOpacity > 0 ? splitRenderableSegments(item.points, style.spanNulls) : [];
 
-              return areaPath ? (
-                <path
-                  key={`${item.id}:fill`}
-                  d={areaPath}
-                  fill={resolvedOptions.gradientMode === 'none' ? color : `url(#${gradientId})`}
-                  fillOpacity={resolvedOptions.gradientMode === 'none' ? effectiveFillOpacity : 1}
-                  stroke="none"
-                />
-              ) : null;
+              return segments.map((segment, segmentIndex) => {
+                const areaPath = buildStepAreaPath(
+                  segment,
+                  x,
+                  y,
+                  margin.top + plotHeight,
+                  style.lineInterpolation
+                );
+
+                return areaPath ? (
+                  <path
+                    key={`${item.id}:fill:${segmentIndex}`}
+                    d={areaPath}
+                    fill={style.gradientMode === 'none' ? color : `url(#${gradientId})`}
+                    fillOpacity={style.gradientMode === 'none' ? style.fillOpacity : 1}
+                    stroke="none"
+                  />
+                ) : null;
+              });
             })}
 
-          {visibleSeries.map((item) => {
-            const seriesIndex = series.findIndex((seriesItem) => seriesItem.id === item.id);
-            const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, seriesIndex);
-            const path = buildLinePath(item.points, x, y, resolvedOptions.lineInterpolation);
+          {renderSeries.map((item) => {
+            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
+            const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
 
-            return path ? (
-              <path
-                key={item.id}
-                d={path}
-                fill="none"
-                stroke={color}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeDasharray={lineDash}
-                strokeOpacity={lineOpacity}
-                strokeWidth={resolvedOptions.lineWidth}
-              />
-            ) : null;
+            if (style.drawStyle !== 'bars') {
+              return null;
+            }
+
+            const nonNullPoints = item.points.filter((point) => point.value !== null);
+            const automaticWidth = nonNullPoints.length > 0 ? (plotWidth / nonNullPoints.length) * style.barWidthFactor : 1;
+            const barWidth = clamp(automaticWidth, 1, style.barMaxWidth ?? 18);
+            const baseline = margin.top + plotHeight;
+
+            return nonNullPoints.map((point) => {
+              const barTop = y(point.value);
+              const top = Math.min(barTop, baseline);
+              const barHeight = Math.max(1, Math.abs(baseline - barTop));
+
+              return (
+                <rect
+                  key={`${item.id}:bar:${point.time}`}
+                  x={x(point.time) - barWidth / 2}
+                  y={top}
+                  width={barWidth}
+                  height={barHeight}
+                  fill={color}
+                  fillOpacity={Math.max(style.fillOpacity, style.lineOpacity)}
+                />
+              );
+            });
+          })}
+
+          {renderSeries.map((item) => {
+            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
+            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex);
+            const segments =
+              style.drawStyle === 'line' && style.lineWidth > 0
+                ? splitRenderableSegments(item.points, style.spanNulls)
+                : [];
+
+            return segments.map((segment, segmentIndex) => {
+              const path = buildLinePath(segment, x, y, style.lineInterpolation);
+
+              return path ? (
+                <path
+                  key={`${item.id}:line:${segmentIndex}`}
+                  d={path}
+                  fill="none"
+                  stroke={color}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={style.lineDash}
+                  strokeOpacity={style.lineOpacity}
+                  strokeWidth={style.lineWidth}
+                />
+              ) : null;
+            });
+          })}
+
+          {renderSeries.map((item) => {
+            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
+            const color = getSeriesPointColor(item, resolvedOptions.colorPalette, seriesIndex);
+
+            if (style.pointVisibility === 'never') {
+              return null;
+            }
+
+            return item.points
+              .filter((point) => point.value !== null)
+              .map((point) => (
+                <circle
+                  key={`${item.id}:point:${point.time}`}
+                  cx={x(point.time)}
+                  cy={y(point.value)}
+                  fill={color}
+                  fillOpacity={style.lineOpacity}
+                  r={style.pointSize}
+                  stroke={theme.colors.background.primary}
+                  strokeWidth={Math.max(0.75, style.lineWidth * 0.4)}
+                />
+              ));
           })}
 
           {thresholdLines.map((threshold) => {
@@ -655,6 +1004,19 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
             y2={margin.top + plotHeight}
             stroke={theme.colors.border.medium}
           />
+
+          {temporalLabels.map((label) => (
+            <text
+              key={label.key}
+              x={margin.left + label.x}
+              y={margin.top + plotHeight + 16}
+              fill={textColor}
+              fontSize={11}
+              textAnchor="middle"
+            >
+              {label.text}
+            </text>
+          ))}
         </g>
       </svg>
 
@@ -683,8 +1045,9 @@ export const ContextCompressionPanel: React.FC<Props> = ({ options, data, width,
           <div className={styles.legendHeader}>Last</div>
           <div className={styles.legendHeader}>Max</div>
 
-          {series.map((item, index) => {
-            const color = item.color ?? getPaletteColor(resolvedOptions.colorPalette, index);
+          {legendSeries.map((item) => {
+            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex);
             const stats = getSeriesStats(item.points);
             const isHidden = hiddenSeries.has(item.id);
             const toggleClassName = cx(styles.legendToggle, isHidden && styles.legendHidden);

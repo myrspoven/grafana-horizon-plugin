@@ -47,4 +47,44 @@ describe('extractTimeSeries', () => {
 
     expect(series[0].color).toBeUndefined();
   });
+
+  it('preserves Grafana TimeSeries custom field config from imported panels', () => {
+    const data = panelDataWithColor(FieldColorModeId.PaletteClassic);
+    data.series[0].fields[1].config.custom = {
+      drawStyle: 'points',
+      fillOpacity: 42,
+      lineInterpolation: 'smooth',
+      lineWidth: 0,
+      showPoints: 'always',
+      spanNulls: false,
+      stacking: {
+        mode: 'normal',
+      },
+    };
+
+    const series = extractTimeSeries(data);
+
+    expect(series[0].fieldConfig).toMatchObject({
+      drawStyle: 'points',
+      fillOpacity: 42,
+      lineInterpolation: 'smooth',
+      lineWidth: 0,
+      showPoints: 'always',
+      spanNulls: false,
+      stacking: {
+        mode: 'normal',
+      },
+    });
+  });
+
+  it('applies the standard negative-y transform', () => {
+    const data = panelDataWithColor(FieldColorModeId.PaletteClassic);
+    data.series[0].fields[1].config.custom = {
+      transform: 'negative-Y',
+    };
+
+    const series = extractTimeSeries(data);
+
+    expect(series[0].points.map((point) => point.value)).toEqual([-1, -2]);
+  });
 });

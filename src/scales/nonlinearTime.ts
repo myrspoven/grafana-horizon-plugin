@@ -1,4 +1,4 @@
-import { ContextCompressionOptions } from '../types';
+import { HorizonOptions } from '../types';
 
 export interface NonlinearTimeScale {
   domainStart: number;
@@ -28,7 +28,7 @@ function createLogProjection(domainStart: number, domainEnd: number, width: numb
 }
 
 export function createNonlinearTimeScale(
-  options: ContextCompressionOptions,
+  options: HorizonOptions,
   width: number,
   domainStartInput: number,
   domainEndInput: number

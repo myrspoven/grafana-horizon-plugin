@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.16] - 2026-05-28
+
+### Added
+
+- Field default/override options for connecting null values, point visibility, stacked series rendering, and legend sorting.
+- Grafana TimeSeries-style field override support for draw style, interpolation, line/fill/point styling, stacking, soft axis bounds, visibility, thresholds style, and negative-Y transform.
+- Optional collision-aware X-axis labels with hourly labels for the last range day and day labels for older visible days.
+- Day band brightness option for tuning alternating background stripe intensity.
+
 ## [0.0.15] - 2026-05-27
 
 ### Added

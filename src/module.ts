@@ -1,8 +1,9 @@
 import { FieldColorModeId, FieldConfigProperty, PanelPlugin } from '@grafana/data';
-import { ContextCompressionPanel } from './components/ContextCompressionPanel';
-import { ContextCompressionOptions, defaultOptions } from './types';
+import { StandardTimeSeriesFieldConfig } from './data/extractSeries';
+import { HorizonPanel } from './components/HorizonPanel';
+import { HorizonOptions, defaultOptions } from './types';
 
-export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompressionPanel)
+export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldConfig>(HorizonPanel)
   .useFieldConfig({
     standardOptions: {
       [FieldConfigProperty.Color]: {
@@ -15,6 +16,217 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
         },
       },
       [FieldConfigProperty.Thresholds]: {},
+    },
+    useCustomConfig: (builder) => {
+      const graphStyles = ['Graph styles'];
+      const stacking = ['Stacking'];
+      const axis = ['Axis'];
+      const visibility = ['Visibility'];
+      const thresholds = ['Thresholds'];
+
+      builder
+        .addRadio({
+          path: 'drawStyle',
+          name: 'Style',
+          category: graphStyles,
+          defaultValue: 'line',
+          settings: {
+            options: [
+              { value: 'line', label: 'Lines' },
+              { value: 'bars', label: 'Bars' },
+              { value: 'points', label: 'Points' },
+            ],
+          },
+        })
+        .addRadio({
+          path: 'lineInterpolation',
+          name: 'Line interpolation',
+          category: graphStyles,
+          defaultValue: 'stepAfter',
+          settings: {
+            options: [
+              { value: 'linear', label: 'Linear' },
+              { value: 'smooth', label: 'Smooth' },
+              { value: 'stepAfter', label: 'Step after' },
+              { value: 'stepBefore', label: 'Step before' },
+            ],
+          },
+        })
+        .addSliderInput({
+          path: 'lineWidth',
+          name: 'Line width',
+          category: graphStyles,
+          defaultValue: 1.5,
+          settings: {
+            min: 0,
+            max: 10,
+            step: 0.5,
+          },
+        })
+        .addRadio({
+          path: 'lineStyle',
+          name: 'Line style',
+          category: graphStyles,
+          defaultValue: { fill: 'solid' },
+          settings: {
+            options: [
+              { value: { fill: 'solid' }, label: 'Solid' },
+              { value: { fill: 'dash' }, label: 'Dash' },
+              { value: { fill: 'dot' }, label: 'Dots' },
+            ],
+          },
+        })
+        .addSliderInput({
+          path: 'fillOpacity',
+          name: 'Fill opacity',
+          category: graphStyles,
+          defaultValue: 0,
+          settings: {
+            min: 0,
+            max: 100,
+            step: 1,
+          },
+        })
+        .addRadio({
+          path: 'gradientMode',
+          name: 'Gradient mode',
+          category: graphStyles,
+          defaultValue: 'none',
+          settings: {
+            options: [
+              { value: 'none', label: 'None' },
+              { value: 'opacity', label: 'Opacity' },
+              { value: 'hue', label: 'Hue' },
+              { value: 'scheme', label: 'Scheme' },
+            ],
+          },
+        })
+        .addBooleanSwitch({
+          path: 'spanNulls',
+          name: 'Connect null values',
+          category: graphStyles,
+          defaultValue: true,
+        })
+        .addRadio({
+          path: 'showPoints',
+          name: 'Show points',
+          category: graphStyles,
+          defaultValue: 'auto',
+          settings: {
+            options: [
+              { value: 'auto', label: 'Auto' },
+              { value: 'always', label: 'Always' },
+              { value: 'never', label: 'Never' },
+            ],
+          },
+        })
+        .addSliderInput({
+          path: 'pointSize',
+          name: 'Point size',
+          category: graphStyles,
+          defaultValue: 4,
+          settings: {
+            min: 1,
+            max: 40,
+            step: 1,
+          },
+        })
+        .addSliderInput({
+          path: 'barWidthFactor',
+          name: 'Bar width factor',
+          category: graphStyles,
+          defaultValue: 0.6,
+          settings: {
+            min: 0.05,
+            max: 1,
+            step: 0.05,
+          },
+        })
+        .addSliderInput({
+          path: 'barMaxWidth',
+          name: 'Bar max width',
+          category: graphStyles,
+          defaultValue: 18,
+          settings: {
+            min: 1,
+            max: 100,
+            step: 1,
+          },
+        })
+        .addColorPicker({
+          path: 'lineColor',
+          name: 'Line color',
+          category: graphStyles,
+        })
+        .addColorPicker({
+          path: 'fillColor',
+          name: 'Fill color',
+          category: graphStyles,
+        })
+        .addColorPicker({
+          path: 'pointColor',
+          name: 'Point color',
+          category: graphStyles,
+        })
+        .addRadio({
+          path: 'stacking',
+          name: 'Stack series',
+          category: stacking,
+          defaultValue: { mode: 'none' },
+          settings: {
+            options: [
+              { value: { mode: 'none' }, label: 'Off' },
+              { value: { mode: 'normal' }, label: 'Normal' },
+              { value: { mode: 'percent' }, label: '100%' },
+            ],
+          },
+        })
+        .addNumberInput({
+          path: 'axisSoftMin',
+          name: 'Soft min',
+          category: axis,
+        })
+        .addNumberInput({
+          path: 'axisSoftMax',
+          name: 'Soft max',
+          category: axis,
+        })
+        .addBooleanSwitch({
+          path: 'hideFrom.viz',
+          name: 'Hide in visualization',
+          category: visibility,
+          defaultValue: false,
+        })
+        .addBooleanSwitch({
+          path: 'hideFrom.legend',
+          name: 'Hide in legend',
+          category: visibility,
+          defaultValue: false,
+        })
+        .addRadio({
+          path: 'thresholdsStyle.mode',
+          name: 'Show thresholds',
+          category: thresholds,
+          defaultValue: 'off',
+          settings: {
+            options: [
+              { value: 'off', label: 'Off' },
+              { value: 'line', label: 'As lines' },
+              { value: 'line+area', label: 'As lines and area' },
+            ],
+          },
+        })
+        .addRadio({
+          path: 'transform',
+          name: 'Transform',
+          category: graphStyles,
+          settings: {
+            options: [
+              { value: undefined, label: 'None' },
+              { value: 'negative-Y', label: 'Negative Y' },
+            ],
+          },
+        });
     },
   })
   .setPanelOptions((builder) => {
@@ -106,16 +318,6 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
         },
       })
       .addSliderInput({
-        path: 'lineWidth',
-        name: 'Line width',
-        defaultValue: defaultOptions.lineWidth,
-        settings: {
-          min: 0,
-          max: 10,
-          step: 0.5,
-        },
-      })
-      .addSliderInput({
         path: 'lineOpacity',
         name: 'Line opacity',
         defaultValue: defaultOptions.lineOpacity,
@@ -125,108 +327,25 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
           step: 0.05,
         },
       })
+      .addBooleanSwitch({
+        path: 'showLegend',
+        name: 'Show legend',
+        defaultValue: defaultOptions.showLegend,
+      })
+      .addBooleanSwitch({
+        path: 'showXAxisLabels',
+        name: 'Show X-axis labels',
+        defaultValue: defaultOptions.showXAxisLabels,
+      })
       .addSliderInput({
-        path: 'fillOpacity',
-        name: 'Fill opacity',
-        defaultValue: defaultOptions.fillOpacity,
+        path: 'dayBandOpacity',
+        name: 'Day band brightness',
+        defaultValue: defaultOptions.dayBandOpacity,
         settings: {
           min: 0,
           max: 100,
           step: 1,
         },
-      })
-      .addRadio({
-        path: 'gradientMode',
-        defaultValue: defaultOptions.gradientMode,
-        name: 'Gradient mode',
-        settings: {
-          options: [
-            {
-              value: 'none',
-              label: 'None',
-            },
-            {
-              value: 'opacity',
-              label: 'Opacity',
-            },
-            {
-              value: 'hue',
-              label: 'Hue',
-            },
-            {
-              value: 'scheme',
-              label: 'Scheme',
-            },
-          ],
-        },
-      })
-      .addRadio({
-        path: 'lineInterpolation',
-        defaultValue: defaultOptions.lineInterpolation,
-        name: 'Line interpolation',
-        settings: {
-          options: [
-            {
-              value: 'linear',
-              label: 'Linear',
-            },
-            {
-              value: 'smooth',
-              label: 'Smooth',
-            },
-            {
-              value: 'stepAfter',
-              label: 'Step after',
-            },
-            {
-              value: 'stepBefore',
-              label: 'Step before',
-            },
-          ],
-        },
-      })
-      .addRadio({
-        path: 'lineStyle',
-        defaultValue: defaultOptions.lineStyle,
-        name: 'Line style',
-        settings: {
-          options: [
-            {
-              value: 'solid',
-              label: 'Solid',
-            },
-            {
-              value: 'dash',
-              label: 'Dash',
-            },
-            {
-              value: 'dot',
-              label: 'Dot',
-            },
-          ],
-        },
-      })
-      .addRadio({
-        path: 'thresholdDisplay',
-        defaultValue: defaultOptions.thresholdDisplay,
-        name: 'Show thresholds',
-        settings: {
-          options: [
-            {
-              value: 'off',
-              label: 'Off',
-            },
-            {
-              value: 'lines',
-              label: 'As lines (dashed)',
-            },
-          ],
-        },
-      })
-      .addBooleanSwitch({
-        path: 'showLegend',
-        name: 'Show legend',
-        defaultValue: defaultOptions.showLegend,
       })
       .addRadio({
         path: 'legendPlacement',
@@ -241,6 +360,27 @@ export const plugin = new PanelPlugin<ContextCompressionOptions>(ContextCompress
             {
               value: 'bottom',
               label: 'Bottom',
+            },
+          ],
+        },
+      })
+      .addRadio({
+        path: 'legendSortMode',
+        defaultValue: defaultOptions.legendSortMode,
+        name: 'Legend order',
+        settings: {
+          options: [
+            {
+              value: 'original',
+              label: 'Query order',
+            },
+            {
+              value: 'alphabetical',
+              label: 'Alphabetical',
+            },
+            {
+              value: 'valueDesc',
+              label: 'Last value, then max',
             },
           ],
         },

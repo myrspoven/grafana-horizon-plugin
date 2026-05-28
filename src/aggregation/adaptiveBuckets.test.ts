@@ -80,4 +80,24 @@ describe('aggregateSeries', () => {
 
     expect(oldBucketCount).toBeLessThan(recentBucketCount);
   });
+
+  it('keeps null-only buckets so null connection settings can create visible gaps', () => {
+    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 6, rangeStart, now);
+    const result = aggregateSeries(
+      [
+        {
+          id: 'a',
+          name: 'A',
+          points: [
+            { time: now - 20 * 60 * 1000, value: null },
+            { time: now - 10 * 60 * 1000, value: null },
+          ],
+        },
+      ],
+      scale,
+      { ...options, aggregationMode: 'max' }
+    );
+
+    expect(result[0].points.some((point) => point.value === null)).toBe(true);
+  });
 });

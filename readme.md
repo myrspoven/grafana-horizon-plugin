@@ -13,9 +13,10 @@ It renders a continuous nonlinear time axis using a `log1p(age)` projection: rec
 - Linear or zero-safe `log1p` Y-axis.
 - Optional Y-axis lower bound at zero or the smallest visible series value.
 - Hourly vertical markers for the current day and daily markers for older history.
+- Optional collision-aware X-axis labels with hours for the last range day and day labels for older history.
 - Alternating day background bands for easier temporal scanning.
 - Grafana field color overrides with palette fallback.
-- Legend placement, line width, line opacity, fill opacity, gradient mode, and line style options.
+- Legend placement and ordering, line width, line opacity, fill opacity, gradient mode, line style, null connection, point visibility, stacking, and common Grafana TimeSeries field override options.
 - Grafana field thresholds rendered as optional dashed threshold lines.
 - Clickable legend rows for temporarily showing or hiding series.
 
@@ -77,10 +78,13 @@ Useful options:
 - **Y-axis lower bound** keeps the baseline at zero or at the visible series minimum.
 - **Palette** controls fallback colors when Grafana field colors are not set.
 - **Legend placement** moves the legend to the right or bottom.
-- **Line interpolation**, **line style**, **line width**, **line opacity**, **fill opacity**, and **gradient mode** tune the rendering.
-- **Show thresholds** renders Grafana field thresholds as dashed horizontal lines.
+- **Legend order** keeps query order, sorts alphabetically, or sorts by last value and then max value.
+- **Show X-axis labels** toggles hourly and daily labels on the nonlinear timeline.
+- **Day band brightness** tunes the alternating background stripe intensity.
+- **Line opacity** tunes the global line/point opacity.
+- Graph styling such as line interpolation, line style, line width, fill opacity, gradient mode, connect null values, show points, stack series, and threshold display is configured through Grafana field defaults or field overrides.
 
-Series-specific colors are configured with Grafana field overrides: add an override for a field, choose **Standard options > Color scheme**, and set a single color. Thresholds use Grafana's standard field threshold editor.
+Series-specific colors are configured with Grafana field overrides: add an override for a field, choose **Standard options > Color scheme**, and set a single color. Thresholds use Grafana's standard field threshold editor. Field defaults and overrides also support TimeSeries-style settings such as draw style, line interpolation, line width, fill opacity, gradient mode, line style, connect null values, show points, point size, stacking, soft axis bounds, hide-from-visualization, and negative-Y transform where they fit the nonlinear renderer.
 
 Legend clicks hide or show a series within the panel. This is local display state and does not change the Grafana query.
 

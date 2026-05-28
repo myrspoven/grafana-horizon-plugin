@@ -2,47 +2,41 @@ export type AggregationMode = 'max' | 'avg';
 export type ColorPalette = 'grafana' | 'classic' | 'cool' | 'warm';
 export type GradientMode = 'none' | 'opacity' | 'hue' | 'scheme';
 export type LegendPlacement = 'right' | 'bottom';
+export type LegendSortMode = 'original' | 'alphabetical' | 'valueDesc';
 export type LineInterpolation = 'linear' | 'smooth' | 'stepAfter' | 'stepBefore';
-export type LineStyle = 'solid' | 'dash' | 'dot';
-export type ThresholdDisplay = 'off' | 'lines';
+export type PointVisibility = 'auto' | 'always' | 'never';
 export type YAxisLowerBound = 'zero' | 'seriesMin';
 export type YScaleMode = 'linear' | 'log1p';
 
-export interface ContextCompressionOptions {
+export interface HorizonOptions {
   compressionFocusHours: number;
   aggregationMode: AggregationMode;
   colorPalette: ColorPalette;
-  fillOpacity: number;
-  gradientMode: GradientMode;
+  dayBandOpacity: number;
   legendPlacement: LegendPlacement;
-  lineInterpolation: LineInterpolation;
+  legendSortMode: LegendSortMode;
   lineOpacity: number;
-  lineStyle: LineStyle;
-  thresholdDisplay: ThresholdDisplay;
   yAxisLowerBound: YAxisLowerBound;
   yScaleMode: YScaleMode;
-  lineWidth: number;
   showLegend: boolean;
+  showXAxisLabels: boolean;
 }
 
-export const defaultOptions: ContextCompressionOptions = {
+export const defaultOptions: HorizonOptions = {
   compressionFocusHours: 6,
   aggregationMode: 'max',
   colorPalette: 'grafana',
-  fillOpacity: 0,
-  gradientMode: 'none',
+  dayBandOpacity: 32,
   legendPlacement: 'right',
-  lineInterpolation: 'stepAfter',
+  legendSortMode: 'original',
   lineOpacity: 0.95,
-  lineStyle: 'solid',
-  thresholdDisplay: 'off',
   yAxisLowerBound: 'zero',
   yScaleMode: 'log1p',
-  lineWidth: 1.5,
   showLegend: true,
+  showXAxisLabels: true,
 };
 
-export function resolveOptions(options: Partial<ContextCompressionOptions>): ContextCompressionOptions {
+export function resolveOptions(options: Partial<HorizonOptions>): HorizonOptions {
   return {
     ...defaultOptions,
     ...options,

@@ -1,6 +1,6 @@
 import { TimeSeries, TimeSeriesPoint } from '../data/extractSeries';
 import { NonlinearTimeScale } from '../scales/nonlinearTime';
-import { AggregationMode, ContextCompressionOptions } from '../types';
+import { AggregationMode, HorizonOptions } from '../types';
 
 const BUCKET_PIXEL_WIDTH = 2;
 
@@ -10,6 +10,7 @@ interface Bucket {
   sum: number;
   count: number;
   max: number;
+  nullCount: number;
 }
 
 function aggregateValue(bucket: Bucket, mode: AggregationMode): number {
@@ -23,12 +24,12 @@ function aggregateValue(bucket: Bucket, mode: AggregationMode): number {
 function aggregatePoints(
   points: TimeSeriesPoint[],
   scale: NonlinearTimeScale,
-  options: ContextCompressionOptions
+  options: HorizonOptions
 ): TimeSeriesPoint[] {
   const buckets = new Map<string, Bucket>();
 
   for (const point of points) {
-    if (point.value === null || point.time < scale.domainStart || point.time > scale.domainEnd) {
+    if (point.time < scale.domainStart || point.time > scale.domainEnd) {
       continue;
     }
 
@@ -38,17 +39,24 @@ function aggregatePoints(
     const existing = buckets.get(key);
 
     if (existing) {
-      existing.sum += point.value;
       existing.timeSum += point.time;
+
+      if (point.value === null) {
+        existing.nullCount += 1;
+        continue;
+      }
+
+      existing.sum += point.value;
       existing.count += 1;
       existing.max = Math.max(existing.max, point.value);
     } else {
       buckets.set(key, {
         time: point.time,
         timeSum: point.time,
-        sum: point.value,
-        count: 1,
-        max: point.value,
+        sum: point.value ?? 0,
+        count: point.value === null ? 0 : 1,
+        max: point.value ?? 0,
+        nullCount: point.value === null ? 1 : 0,
       });
     }
   }
@@ -56,15 +64,15 @@ function aggregatePoints(
   return Array.from(buckets.values())
     .sort((a, b) => a.time - b.time)
     .map((bucket) => ({
-      time: bucket.timeSum / bucket.count,
-      value: aggregateValue(bucket, options.aggregationMode),
+      time: bucket.timeSum / Math.max(1, bucket.count + bucket.nullCount),
+      value: bucket.count === 0 ? null : aggregateValue(bucket, options.aggregationMode),
     }));
 }
 
 export function aggregateSeries(
   series: TimeSeries[],
   scale: NonlinearTimeScale,
-  options: ContextCompressionOptions
+  options: HorizonOptions
 ): TimeSeries[] {
   return series
     .map((item) => ({

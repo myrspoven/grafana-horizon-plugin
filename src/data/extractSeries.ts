@@ -1,5 +1,56 @@
 import { DataFrame, Field, FieldColorModeId, FieldType, PanelData, ThresholdsConfig } from '@grafana/data';
 
+export type StandardDrawStyle = 'bars' | 'line' | 'points';
+export type StandardGradientMode = 'hue' | 'none' | 'opacity' | 'scheme';
+export type StandardLineInterpolation = 'linear' | 'smooth' | 'stepAfter' | 'stepBefore';
+export type StandardPointVisibility = 'always' | 'auto' | 'never';
+export type StandardStackingMode = 'none' | 'normal' | 'percent';
+export type StandardThresholdsStyleMode = 'area' | 'line' | 'line+area' | 'off' | 'series';
+export type StandardTransform = 'constant' | 'negative-Y';
+
+export interface StandardLineStyle {
+  dash?: number[];
+  fill?: 'dash' | 'dot' | 'solid' | 'square';
+}
+
+export interface StandardHideFromConfig {
+  legend?: boolean;
+  tooltip?: boolean;
+  viz?: boolean;
+}
+
+export interface StandardStackingConfig {
+  group?: string;
+  mode?: StandardStackingMode;
+}
+
+export interface StandardThresholdsStyleConfig {
+  mode?: StandardThresholdsStyleMode;
+}
+
+export interface StandardTimeSeriesFieldConfig {
+  axisSoftMax?: number;
+  axisSoftMin?: number;
+  barMaxWidth?: number;
+  barWidthFactor?: number;
+  drawStyle?: StandardDrawStyle;
+  fillOpacity?: number;
+  gradientMode?: StandardGradientMode;
+  hideFrom?: StandardHideFromConfig;
+  fillColor?: string;
+  lineInterpolation?: StandardLineInterpolation;
+  lineColor?: string;
+  lineStyle?: StandardLineStyle;
+  lineWidth?: number;
+  pointColor?: string;
+  pointSize?: number;
+  showPoints?: StandardPointVisibility;
+  spanNulls?: boolean | number;
+  stacking?: StandardStackingConfig;
+  thresholdsStyle?: StandardThresholdsStyleConfig;
+  transform?: StandardTransform;
+}
+
 export interface TimeSeriesPoint {
   time: number;
   value: number | null;
@@ -9,6 +60,7 @@ export interface TimeSeries {
   id: string;
   name: string;
   color?: string;
+  fieldConfig?: StandardTimeSeriesFieldConfig;
   labels?: Record<string, string>;
   points: TimeSeriesPoint[];
   thresholds?: ThresholdsConfig;
@@ -75,6 +127,28 @@ function getSeriesColor(field: Field): string | undefined {
   return undefined;
 }
 
+function getTimeSeriesFieldConfig(field: Field): StandardTimeSeriesFieldConfig | undefined {
+  const custom = field.config.custom;
+
+  if (!custom || typeof custom !== 'object') {
+    return undefined;
+  }
+
+  return custom as StandardTimeSeriesFieldConfig;
+}
+
+function applyTransform(value: number | null, fieldConfig: StandardTimeSeriesFieldConfig | undefined): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (fieldConfig?.transform === 'negative-Y') {
+    return -value;
+  }
+
+  return value;
+}
+
 export function extractTimeSeries(data: PanelData): TimeSeries[] {
   const series: TimeSeries[] = [];
 
@@ -87,6 +161,7 @@ export function extractTimeSeries(data: PanelData): TimeSeries[] {
     }
 
     for (const valueField of valueFields) {
+      const fieldConfig = getTimeSeriesFieldConfig(valueField);
       const length = Math.min(fieldLength(timeField), fieldLength(valueField));
       const points: TimeSeriesPoint[] = [];
 
@@ -98,7 +173,7 @@ export function extractTimeSeries(data: PanelData): TimeSeries[] {
 
         points.push({
           time,
-          value: toNumber(readValue(valueField.values, index)),
+          value: applyTransform(toNumber(readValue(valueField.values, index)), fieldConfig),
         });
       }
 
@@ -112,6 +187,7 @@ export function extractTimeSeries(data: PanelData): TimeSeries[] {
         id: `${frame.refId ?? frame.name ?? 'frame'}:${valueField.name}:${series.length}`,
         name: getSeriesName(frame, valueField),
         color: getSeriesColor(valueField),
+        fieldConfig,
         labels: valueField.labels,
         points,
         thresholds: valueField.config.thresholds,
