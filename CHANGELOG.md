@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.21] - 2026-05-29
+
+### Fixed
+
+- SVG gradient fills now use panel-instance-scoped IDs so edit mode cannot collide with another rendered panel copy.
+- The panel color palette option now applies to Grafana palette color modes instead of always falling back to the Grafana palette.
+
+### Changed
+
+- Updated low-risk frontend build and test tooling dependencies.
+
 ## [0.0.20] - 2026-05-29
 
 ### Fixed

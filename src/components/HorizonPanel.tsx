@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, useState } from 'react';
+import React, { KeyboardEvent, useId, useState } from 'react';
 import { FieldColorModeId, getDisplayProcessor, PanelProps, Threshold, ThresholdsMode } from '@grafana/data';
 import { css, cx } from '@emotion/css';
 import { useStyles2, useTheme2 } from '@grafana/ui';
@@ -509,11 +509,11 @@ function getSeriesLineColor(item: TimeSeries, paletteName: ColorPalette, seriesI
   }
 
   if (colorConfig?.mode === FieldColorModeId.PaletteClassic) {
-    return getThemeColor(theme, getPaletteColor('grafana', seriesIndex));
+    return getThemeColor(theme, getPaletteColor(paletteName, seriesIndex));
   }
 
   if (colorConfig?.mode === FieldColorModeId.PaletteClassicByName) {
-    return getThemeColor(theme, getPaletteColor('grafana', hashString(item.name)));
+    return getThemeColor(theme, getPaletteColor(paletteName, hashString(item.name)));
   }
 
   return getThemeColor(theme, item.color ?? getPaletteColor(paletteName, seriesIndex));
@@ -797,6 +797,7 @@ function getSafeId(id: string): string {
 export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, timeRange }) => {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
+  const panelInstanceId = getSafeId(useId());
   const resolvedOptions = resolveOptions(options);
   const rawSeries = extractTimeSeries(data);
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => new Set());
@@ -944,7 +945,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
               const seriesIndex = seriesIndexById.get(item.id) ?? 0;
               const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
               const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-              const gradientId = `horizon-fill-${getSafeId(item.id)}`;
+              const gradientId = `horizon-fill-${panelInstanceId}-${getSafeId(item.id)}`;
               const stops = getGradientStops(
                 style.gradientMode === 'none' ? 'opacity' : style.gradientMode,
                 color,
@@ -1038,7 +1039,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
               const seriesIndex = seriesIndexById.get(item.id) ?? 0;
               const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
               const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-              const gradientId = `horizon-fill-${getSafeId(item.id)}`;
+              const gradientId = `horizon-fill-${panelInstanceId}-${getSafeId(item.id)}`;
               const segments = style.fillOpacity > 0 ? splitRenderableSegments(item.points, style.spanNulls) : [];
 
               return segments.map((segment, segmentIndex) => {
