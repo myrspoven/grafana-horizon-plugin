@@ -523,12 +523,18 @@ function getSeriesPointColor(item: TimeSeries, paletteName: ColorPalette, series
   return getSeriesLineColor(item, paletteName, seriesIndex, theme);
 }
 
+function hasSeriesColorOverride(item: TimeSeries): boolean {
+  const mode = item.config?.color?.mode;
+  return mode === FieldColorModeId.Fixed || mode === FieldColorModeId.Shades;
+}
+
 function getGradientStops(
   mode: GradientMode,
   color: string,
   fillOpacity: number,
   paletteName: ColorPalette,
-  seriesIndex: number
+  seriesIndex: number,
+  hasColorOverride: boolean
 ): Array<{ color: string; offset: string; opacity: number }> {
   if (mode === 'opacity') {
     return [
@@ -538,9 +544,28 @@ function getGradientStops(
   }
 
   if (mode === 'hue') {
+    if (hasColorOverride) {
+      return [
+        { color: getShadeColor(color, 1), offset: '0%', opacity: fillOpacity },
+        { color, offset: '100%', opacity: Math.max(0.08, fillOpacity * 0.35) },
+      ];
+    }
+
     return [
       { color: getPaletteColor(paletteName, seriesIndex + 1), offset: '0%', opacity: fillOpacity },
       { color, offset: '100%', opacity: Math.max(0.08, fillOpacity * 0.35) },
+    ];
+  }
+
+  if (hasColorOverride) {
+    return [
+      { color: getShadeColor(color, 3), offset: '0%', opacity: fillOpacity },
+      { color, offset: '50%', opacity: fillOpacity * 0.65 },
+      {
+        color: getShadeColor(color, 4),
+        offset: '100%',
+        opacity: Math.max(0.06, fillOpacity * 0.25),
+      },
     ];
   }
 
@@ -921,7 +946,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
                 color,
                 style.fillOpacity,
                 resolvedOptions.colorPalette,
-                seriesIndex
+                seriesIndex,
+                hasSeriesColorOverride(item)
               );
 
               return (

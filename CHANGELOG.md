@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.19] - 2026-05-29
+
+### Fixed
+
+- Gradient hue and scheme modes now derive from fixed color overrides when present.
+
 ## [0.0.18] - 2026-05-29
 
 ### Fixed
