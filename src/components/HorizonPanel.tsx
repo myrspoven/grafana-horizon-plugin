@@ -1,5 +1,5 @@
 import React, { KeyboardEvent, useMemo, useState } from 'react';
-import { PanelProps, Threshold, ThresholdsMode } from '@grafana/data';
+import { FieldColorModeId, getDisplayProcessor, PanelProps, Threshold, ThresholdsMode } from '@grafana/data';
 import { css, cx } from '@emotion/css';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 
@@ -69,6 +69,7 @@ const defaultGraphStyle = {
   fillOpacity: 0,
   gradientMode: 'none',
   lineInterpolation: 'stepAfter',
+  lineOpacity: 0.95,
   lineWidth: 1.5,
   pointSize: 4,
   showPoints: 'auto',
@@ -154,16 +155,37 @@ const getStyles = () => ({
   `,
 });
 
-function formatValue(value: number | null): string {
+function getDisplayValue(value: number, item: TimeSeries | undefined, theme: Theme2) {
+  const display = item?.display ?? getDisplayProcessor({ field: { config: item?.config }, theme: theme as never });
+  return display(value);
+}
+
+function formatValue(value: number | null, item: TimeSeries | undefined, theme: Theme2): string {
   if (value === null) {
     return '-';
   }
 
-  if (Math.abs(value) >= 1000) {
-    return `${Math.round(value / 100) / 10}k`;
+  return getDisplayValue(value, item, theme).text;
+}
+
+function getUnitLabel(series: TimeSeries[], theme: Theme2): string | undefined {
+  const units = Array.from(
+    new Set(
+      series
+        .map((item) => item.config?.unit)
+        .filter((unit): unit is string => Boolean(unit) && unit !== 'none' && unit !== 'short')
+    )
+  );
+
+  if (units.length !== 1) {
+    return undefined;
   }
 
-  return `${Math.round(value * 10) / 10}`;
+  const item = series.find((candidate) => candidate.config?.unit === units[0]);
+  const displayValue = getDisplayValue(1, item, theme);
+  const label = (displayValue.suffix ?? displayValue.prefix ?? units[0]).trim();
+
+  return label || undefined;
 }
 
 function getMaxValue(series: TimeSeries[]): number {
@@ -190,7 +212,23 @@ function getMinValue(series: TimeSeries[]): number {
     return 0;
   }
 
-  return Math.max(0, Math.min(...values));
+  return Math.min(...values);
+}
+
+function getHardMin(series: TimeSeries[]): number | undefined {
+  const values = series
+    .map((item) => item.config?.min)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  return values.length > 0 ? Math.min(...values) : undefined;
+}
+
+function getHardMax(series: TimeSeries[]): number | undefined {
+  const values = series
+    .map((item) => item.config?.max)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  return values.length > 0 ? Math.max(...values) : undefined;
 }
 
 function getSoftMin(series: TimeSeries[]): number | undefined {
@@ -375,24 +413,114 @@ function getPaletteColor(paletteName: ColorPalette, index: number): string {
   return colors[index % colors.length];
 }
 
-function getSeriesLineColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
-  return item.color ?? item.fieldConfig?.lineColor ?? getPaletteColor(paletteName, seriesIndex);
+function hashString(value: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
 }
 
-function getSeriesFillColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
-  return item.fieldConfig?.fillColor ?? getSeriesLineColor(item, paletteName, seriesIndex);
+function parseColor(color: string): { b: number; g: number; r: number } | undefined {
+  const hex = color.trim();
+
+  if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+    return {
+      r: Number.parseInt(hex[1] + hex[1], 16),
+      g: Number.parseInt(hex[2] + hex[2], 16),
+      b: Number.parseInt(hex[3] + hex[3], 16),
+    };
+  }
+
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    return {
+      r: Number.parseInt(hex.slice(1, 3), 16),
+      g: Number.parseInt(hex.slice(3, 5), 16),
+      b: Number.parseInt(hex.slice(5, 7), 16),
+    };
+  }
+
+  const rgb = hex.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+
+  if (rgb) {
+    return {
+      r: Number(rgb[1]),
+      g: Number(rgb[2]),
+      b: Number(rgb[3]),
+    };
+  }
+
+  return undefined;
 }
 
-function getSeriesPointColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number): string {
-  return item.fieldConfig?.pointColor ?? getSeriesLineColor(item, paletteName, seriesIndex);
+function formatRgb({ b, g, r }: { b: number; g: number; r: number }): string {
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+}
+
+function blendChannel(channel: number, target: number, amount: number): number {
+  return channel + (target - channel) * amount;
+}
+
+function getShadeColor(baseColor: string, seriesIndex: number): string {
+  const color = parseColor(baseColor);
+
+  if (!color) {
+    return baseColor;
+  }
+
+  const shadeSteps = [0, 0.22, -0.18, 0.42, -0.32, 0.62, -0.48];
+  const step = shadeSteps[seriesIndex % shadeSteps.length];
+  const target = step >= 0 ? 255 : 0;
+  const amount = Math.abs(step);
+
+  return formatRgb({
+    r: blendChannel(color.r, target, amount),
+    g: blendChannel(color.g, target, amount),
+    b: blendChannel(color.b, target, amount),
+  });
 }
 
 function getThemeColor(theme: Theme2, color: string): string {
-  if (color.startsWith('#') || color.startsWith('rgb') || color.startsWith('hsl') || color.startsWith('var(')) {
+  if (
+    color === 'transparent' ||
+    color.startsWith('#') ||
+    color.startsWith('rgb') ||
+    color.startsWith('hsl') ||
+    color.startsWith('var(')
+  ) {
     return color;
   }
 
   return theme.visualization.getColorByName(color);
+}
+
+function getSeriesLineColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number, theme: Theme2): string {
+  const colorConfig = item.config?.color;
+
+  if (colorConfig?.mode === FieldColorModeId.Shades) {
+    const baseColor = getThemeColor(theme, colorConfig.fixedColor ?? getPaletteColor(paletteName, 0));
+    return getShadeColor(baseColor, seriesIndex);
+  }
+
+  if (colorConfig?.mode === FieldColorModeId.PaletteClassic) {
+    return getThemeColor(theme, getPaletteColor('grafana', seriesIndex));
+  }
+
+  if (colorConfig?.mode === FieldColorModeId.PaletteClassicByName) {
+    return getThemeColor(theme, getPaletteColor('grafana', hashString(item.name)));
+  }
+
+  return getThemeColor(theme, item.color ?? getPaletteColor(paletteName, seriesIndex));
+}
+
+function getSeriesFillColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number, theme: Theme2): string {
+  return getSeriesLineColor(item, paletteName, seriesIndex, theme);
+}
+
+function getSeriesPointColor(item: TimeSeries, paletteName: ColorPalette, seriesIndex: number, theme: Theme2): string {
+  return getSeriesLineColor(item, paletteName, seriesIndex, theme);
 }
 
 function getGradientStops(
@@ -467,7 +595,7 @@ function getThresholdLines(series: TimeSeries[], minValue: number, maxValue: num
       lines.set(key, {
         color,
         key,
-        label: formatValue(value),
+        label: formatValue(value, item, theme),
         value,
       });
     }
@@ -498,7 +626,6 @@ function getCustomLineDash(style: StandardLineStyle | undefined, lineWidth: numb
 
 function getResolvedSeriesStyle(
   fieldConfig: StandardTimeSeriesFieldConfig | undefined,
-  options: HorizonOptions,
   plotWidth: number,
   points: TimeSeriesPoint[]
 ): ResolvedSeriesStyle {
@@ -506,7 +633,7 @@ function getResolvedSeriesStyle(
   const drawStyle = fieldConfig?.drawStyle ?? defaultGraphStyle.drawStyle;
   const pointVisibility = fieldConfig?.showPoints ?? defaultGraphStyle.showPoints;
   const drawStylePointVisibility = drawStyle === 'points' ? 'always' : pointVisibility;
-  const lineOpacity = clamp(options.lineOpacity, 0, 1);
+  const lineOpacity = clamp(fieldConfig?.lineOpacity ?? defaultGraphStyle.lineOpacity, 0, 1);
   const spanNulls = fieldConfig?.spanNulls;
 
   return {
@@ -663,14 +790,20 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
     );
   }
 
-  const canShowLegend = resolvedOptions.showLegend && width >= 360;
-  const showRightLegend = canShowLegend && resolvedOptions.legendPlacement === 'right' && width >= 560;
-  const showBottomLegend = canShowLegend && resolvedOptions.legendPlacement === 'bottom';
+  const canShowLegend = resolvedOptions.legendMode !== 'hidden' && width >= 360;
+  const showRightLegend = canShowLegend && resolvedOptions.legendMode === 'right' && width >= 560;
+  const showBottomLegend = canShowLegend && resolvedOptions.legendMode === 'bottom';
   const showLegend = showRightLegend || showBottomLegend;
   const legendWidth = showRightLegend ? Math.min(250, Math.max(190, width * 0.28)) : 0;
   const legendHeight = showBottomLegend ? Math.min(120, Math.max(44, 24 + rawSeries.length * 18)) : 0;
   const xAxisLabelHeight = resolvedOptions.showXAxisLabels ? 16 : 0;
-  const margin = { top: 14, right: legendWidth + 14, bottom: 24 + xAxisLabelHeight + legendHeight, left: 36 };
+  const yAxisUnitLabel = getUnitLabel(rawSeries, theme);
+  const margin = {
+    top: 14,
+    right: legendWidth + 14,
+    bottom: 24 + xAxisLabelHeight + legendHeight,
+    left: yAxisUnitLabel ? 52 : 36,
+  };
   const plotWidth = Math.max(1, width - margin.left - margin.right);
   const plotHeight = Math.max(1, height - margin.top - margin.bottom);
   const rangeStart = timeRange.from.valueOf();
@@ -705,23 +838,28 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
     );
   }
 
-  const seriesMinValue = resolvedOptions.yAxisLowerBound === 'seriesMin' ? getMinValue(renderSeries) : 0;
+  const renderSeriesMin = getMinValue(renderSeries);
+  const seriesMinValue = resolvedOptions.yAxisLowerBound === 'seriesMin' ? renderSeriesMin : Math.min(0, renderSeriesMin);
+  const hardMin = getHardMin(renderSeries);
+  const hardMax = getHardMax(renderSeries);
   const softMin = getSoftMin(renderSeries);
   const softMax = getSoftMax(renderSeries);
-  const minValue = softMin === undefined ? seriesMinValue : Math.min(seriesMinValue, softMin);
-  const maxValue = Math.max(getMaxValue(renderSeries), softMax ?? Number.NEGATIVE_INFINITY);
+  const minValue = hardMin ?? (softMin === undefined ? seriesMinValue : Math.min(seriesMinValue, softMin));
+  const maxValue = hardMax ?? Math.max(getMaxValue(renderSeries), softMax ?? Number.NEGATIVE_INFINITY);
   const valueScale = createValueScale(minValue, maxValue, plotHeight, resolvedOptions.yScaleMode);
   const temporalMarkers = generateTemporalMarkers(timeScale);
   const temporalLabels = resolvedOptions.showXAxisLabels ? generateTemporalLabels(timeScale) : [];
   const x = (time: number) => margin.left + timeScale.x(time);
   const y = (value: number | null) => margin.top + valueScale.y(value);
+  const zeroBaselineY =
+    valueScale.min < 0 && valueScale.max > 0 ? y(0) : margin.top + plotHeight;
   const gridColor = theme.colors.border.weak;
   const textColor = theme.colors.text.secondary;
   const dayBands = getAlternatingDayBands(timeScale.domainStart, timeScale.domainEnd);
   const dayBandColor = theme.colors.emphasize(theme.colors.background.secondary, 0.08);
   const dayBandOpacity = clamp(resolvedOptions.dayBandOpacity, 0, 100) / 100;
   const shouldFill = renderSeries.some((item) => {
-    return getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points).fillOpacity > 0;
+    return getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points).fillOpacity > 0;
   });
   const thresholdLines =
     visibleSeries.some((item) => hasThresholdLines(item))
@@ -775,8 +913,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
           <defs>
             {renderSeries.map((item) => {
               const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-              const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
-              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
+              const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
+              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
               const gradientId = `horizon-fill-${getSafeId(item.id)}`;
               const stops = getGradientStops(
                 style.gradientMode === 'none' ? 'opacity' : style.gradientMode,
@@ -839,6 +977,19 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
             </g>
           ))}
 
+          {yAxisUnitLabel && (
+            <text
+              x={14}
+              y={margin.top + plotHeight / 2}
+              fill={textColor}
+              fontSize={11}
+              textAnchor="middle"
+              transform={`rotate(-90 14 ${margin.top + plotHeight / 2})`}
+            >
+              {yAxisUnitLabel}
+            </text>
+          )}
+
           {temporalMarkers.map((marker) => (
             <g key={`${marker.time}:${marker.x}`}>
               <line
@@ -855,8 +1006,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
           {shouldFill &&
             renderSeries.map((item) => {
               const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-              const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
-              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
+              const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
+              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
               const gradientId = `horizon-fill-${getSafeId(item.id)}`;
               const segments = style.fillOpacity > 0 ? splitRenderableSegments(item.points, style.spanNulls) : [];
 
@@ -865,7 +1016,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
                   segment,
                   x,
                   y,
-                  margin.top + plotHeight,
+                  zeroBaselineY,
                   style.lineInterpolation
                 );
 
@@ -883,8 +1034,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
           {renderSeries.map((item) => {
             const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
-            const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex);
+            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
+            const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
 
             if (style.drawStyle !== 'bars') {
               return null;
@@ -893,7 +1044,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
             const nonNullPoints = item.points.filter((point) => point.value !== null);
             const automaticWidth = nonNullPoints.length > 0 ? (plotWidth / nonNullPoints.length) * style.barWidthFactor : 1;
             const barWidth = clamp(automaticWidth, 1, style.barMaxWidth ?? 18);
-            const baseline = margin.top + plotHeight;
+            const baseline = zeroBaselineY;
 
             return nonNullPoints.map((point) => {
               const barTop = y(point.value);
@@ -916,8 +1067,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
           {renderSeries.map((item) => {
             const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
-            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex);
+            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
+            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
             const segments =
               style.drawStyle === 'line' && style.lineWidth > 0
                 ? splitRenderableSegments(item.points, style.spanNulls)
@@ -944,8 +1095,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
           {renderSeries.map((item) => {
             const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, resolvedOptions, plotWidth, item.points);
-            const color = getSeriesPointColor(item, resolvedOptions.colorPalette, seriesIndex);
+            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
+            const color = getSeriesPointColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
 
             if (style.pointVisibility === 'never') {
               return null;
@@ -1047,7 +1198,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
           {legendSeries.map((item) => {
             const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex);
+            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
             const stats = getSeriesStats(item.points);
             const isHidden = hiddenSeries.has(item.id);
             const toggleClassName = cx(styles.legendToggle, isHidden && styles.legendHidden);
@@ -1074,7 +1225,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
                   tabIndex={0}
                   title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
                 >
-                  {formatValue(stats.last)}
+                  {formatValue(stats.last, item, theme)}
                 </div>
                 <div
                   className={cx(styles.legendValue, toggleClassName)}
@@ -1084,7 +1235,7 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
                   tabIndex={0}
                   title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
                 >
-                  {formatValue(stats.max)}
+                  {formatValue(stats.max, item, theme)}
                 </div>
               </React.Fragment>
             );

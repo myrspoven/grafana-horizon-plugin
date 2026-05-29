@@ -26,6 +26,14 @@ function log1p(value: number): number {
   return Math.log10(Math.max(0, value) + 1);
 }
 
+function signedLog1p(value: number): number {
+  return Math.sign(value) * log1p(Math.abs(value));
+}
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function linearTicks(min: number, max: number, y: (value: number) => number): ValueTick[] {
   const step = (max - min) / 4;
 
@@ -37,7 +45,14 @@ function linearTicks(min: number, max: number, y: (value: number) => number): Va
 }
 
 function logTicks(min: number, max: number, y: (value: number) => number): ValueTick[] {
-  const candidates = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000];
+  const positiveCandidates = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000];
+  const candidates = [
+    ...positiveCandidates
+      .slice(1)
+      .map((value) => -value)
+      .reverse(),
+    ...positiveCandidates,
+  ];
   const ticks = candidates.filter((value) => value >= min && value <= max);
 
   if (ticks[0] !== min) {
@@ -74,16 +89,16 @@ function removeCrowdedTicks(ticks: ValueTick[], minPixelSpacing = 16): ValueTick
 }
 
 export function createValueScale(minValue: number, maxValue: number, height: number, mode: YScaleMode): ValueScale {
-  const min = Math.max(0, Math.min(minValue, maxValue));
+  const min = Math.min(minValue, maxValue);
   const max = Math.max(min + 1, maxValue);
 
   if (mode === 'log1p') {
-    const transformedMin = log1p(min);
-    const transformedMax = log1p(max);
+    const transformedMin = signedLog1p(min);
+    const transformedMax = signedLog1p(max);
     const transformedRange = Math.max(Number.EPSILON, transformedMax - transformedMin);
     const y = (value: number | null) => {
-      const safeValue = value === null ? min : Math.max(min, value);
-      const transformed = log1p(safeValue);
+      const safeValue = value === null ? min : clampValue(value, min, max);
+      const transformed = signedLog1p(safeValue);
       return height - ((transformed - transformedMin) / transformedRange) * height;
     };
 
@@ -98,7 +113,7 @@ export function createValueScale(minValue: number, maxValue: number, height: num
 
   const range = Math.max(1, max - min);
   const y = (value: number | null) => {
-    const safeValue = value === null ? min : Math.max(min, value);
+    const safeValue = value === null ? min : clampValue(value, min, max);
     return height - ((safeValue - min) / range) * height;
   };
 

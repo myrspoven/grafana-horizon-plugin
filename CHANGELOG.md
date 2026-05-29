@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.18] - 2026-05-29
+
+### Fixed
+
+- Missing buckets inside sparse series are rendered as zero only when the gap is larger than the detected sample cadence.
+- Negative-Y transformed series now render on value scales that include negative values.
+- Standard field unit, decimals, min, and max settings now affect legend formatting and y-axis bounds.
+- Removed custom line, fill, and point color settings so colors are controlled through Grafana standard color options and overrides.
+- Merged legend visibility and placement into one legend mode setting.
+- Removed default visibility switches that could hide every series from the chart or legend at once.
+- Reorganized panel and field settings into logical groups.
+- Moved line opacity into graph style field settings after line width.
+- Moved shared units from repeated legend values to a rotated Y-axis label.
+- Resolved Grafana named color presets before rendering series colors.
+- Added support for Grafana's shades color scheme mode.
+- Distinguished Grafana classic palette ordering from classic palette by series name.
+
+### Changed
+
+- Declared Grafana compatibility now targets Grafana 9.2.0 and newer while production testing remains on Grafana 9.x.
+
+## [0.0.17] - 2026-05-28
+
+### Fixed
+
+- Missing buckets inside sparse series are rendered as zero values instead of interpolating across long gaps.
+
 ## [0.0.16] - 2026-05-28
 
 ### Added

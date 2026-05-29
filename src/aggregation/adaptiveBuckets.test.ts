@@ -101,17 +101,48 @@ describe('aggregateSeries', () => {
     expect(result[0].points.every((point) => point.value === 0)).toBe(true);
   });
 
-  it('fills empty buckets between sparse samples with zero values', () => {
+  it('leaves normal sampling cadence gaps untouched', () => {
     const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 60, rangeStart, now);
+    const inputPoints = Array.from({ length: 12 }, (_, index) => ({
+      time: now - (11 - index) * 30 * 60 * 1000,
+      value: 5,
+    }));
+
     const result = aggregateSeries(
       [
         {
           id: 'a',
           name: 'A',
-          points: [
-            { time: now - 17 * hour, value: 5 },
-            { time: now - 1 * hour, value: 10 },
-          ],
+          points: inputPoints,
+        },
+      ],
+      scale,
+      { ...options, aggregationMode: 'max' }
+    );
+
+    expect(result[0].points.every((point) => point.value === 5)).toBe(true);
+    expect(result[0].points).toHaveLength(inputPoints.length);
+  });
+
+  it('fills empty buckets inside gaps that exceed the detected sample cadence', () => {
+    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 120, rangeStart, now);
+    const inputPoints = [
+      ...Array.from({ length: 4 }, (_, index) => ({
+        time: rangeStart + index * hour,
+        value: 5,
+      })),
+      ...Array.from({ length: 4 }, (_, index) => ({
+        time: now - (3 - index) * hour,
+        value: 10,
+      })),
+    ];
+
+    const result = aggregateSeries(
+      [
+        {
+          id: 'a',
+          name: 'A',
+          points: inputPoints,
         },
       ],
       scale,

@@ -1,7 +1,7 @@
 export type AggregationMode = 'max' | 'avg';
 export type ColorPalette = 'grafana' | 'classic' | 'cool' | 'warm';
 export type GradientMode = 'none' | 'opacity' | 'hue' | 'scheme';
-export type LegendPlacement = 'right' | 'bottom';
+export type LegendMode = 'hidden' | 'right' | 'bottom';
 export type LegendSortMode = 'original' | 'alphabetical' | 'valueDesc';
 export type LineInterpolation = 'linear' | 'smooth' | 'stepAfter' | 'stepBefore';
 export type PointVisibility = 'auto' | 'always' | 'never';
@@ -13,12 +13,10 @@ export interface HorizonOptions {
   aggregationMode: AggregationMode;
   colorPalette: ColorPalette;
   dayBandOpacity: number;
-  legendPlacement: LegendPlacement;
+  legendMode: LegendMode;
   legendSortMode: LegendSortMode;
-  lineOpacity: number;
   yAxisLowerBound: YAxisLowerBound;
   yScaleMode: YScaleMode;
-  showLegend: boolean;
   showXAxisLabels: boolean;
 }
 
@@ -27,12 +25,10 @@ export const defaultOptions: HorizonOptions = {
   aggregationMode: 'max',
   colorPalette: 'grafana',
   dayBandOpacity: 32,
-  legendPlacement: 'right',
+  legendMode: 'right',
   legendSortMode: 'original',
-  lineOpacity: 0.95,
   yAxisLowerBound: 'zero',
   yScaleMode: 'log1p',
-  showLegend: true,
   showXAxisLabels: true,
 };
 

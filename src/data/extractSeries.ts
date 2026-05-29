@@ -1,4 +1,13 @@
-import { DataFrame, Field, FieldColorModeId, FieldType, PanelData, ThresholdsConfig } from '@grafana/data';
+import {
+  DataFrame,
+  DisplayProcessor,
+  Field,
+  FieldColorModeId,
+  FieldConfig,
+  FieldType,
+  PanelData,
+  ThresholdsConfig,
+} from '@grafana/data';
 
 export type StandardDrawStyle = 'bars' | 'line' | 'points';
 export type StandardGradientMode = 'hue' | 'none' | 'opacity' | 'scheme';
@@ -6,7 +15,7 @@ export type StandardLineInterpolation = 'linear' | 'smooth' | 'stepAfter' | 'ste
 export type StandardPointVisibility = 'always' | 'auto' | 'never';
 export type StandardStackingMode = 'none' | 'normal' | 'percent';
 export type StandardThresholdsStyleMode = 'area' | 'line' | 'line+area' | 'off' | 'series';
-export type StandardTransform = 'constant' | 'negative-Y';
+export type StandardTransform = 'negative-Y';
 
 export interface StandardLineStyle {
   dash?: number[];
@@ -37,12 +46,10 @@ export interface StandardTimeSeriesFieldConfig {
   fillOpacity?: number;
   gradientMode?: StandardGradientMode;
   hideFrom?: StandardHideFromConfig;
-  fillColor?: string;
   lineInterpolation?: StandardLineInterpolation;
-  lineColor?: string;
   lineStyle?: StandardLineStyle;
+  lineOpacity?: number;
   lineWidth?: number;
-  pointColor?: string;
   pointSize?: number;
   showPoints?: StandardPointVisibility;
   spanNulls?: boolean | number;
@@ -60,6 +67,8 @@ export interface TimeSeries {
   id: string;
   name: string;
   color?: string;
+  config?: FieldConfig<StandardTimeSeriesFieldConfig>;
+  display?: DisplayProcessor;
   fieldConfig?: StandardTimeSeriesFieldConfig;
   labels?: Record<string, string>;
   points: TimeSeriesPoint[];
@@ -187,6 +196,8 @@ export function extractTimeSeries(data: PanelData): TimeSeries[] {
         id: `${frame.refId ?? frame.name ?? 'frame'}:${valueField.name}:${series.length}`,
         name: getSeriesName(frame, valueField),
         color: getSeriesColor(valueField),
+        config: valueField.config,
+        display: valueField.display,
         fieldConfig,
         labels: valueField.labels,
         points,

@@ -38,11 +38,9 @@
         "aggregationMode": "avg",
         "lineWidth": 1.5,
         "compressionFocusHours": 6,
-        "showLegend": true,
+        "legendMode": "right",
         "yScaleMode": "log1p",
         "colorPalette": "grafana",
-        "legendPlacement": "right",
-        "lineOpacity": 0.95,
         "lineInterpolation": "stepAfter",
         "lineStyle": "solid"
       },
@@ -76,7 +74,7 @@
         "aggregationMode": "max",
         "lineWidth": 1.5,
         "compressionFocusHours": 6,
-        "showLegend": true,
+        "legendMode": "right",
         "lineInterpolation": "stepAfter",
         "yScaleMode": "log1p"
       },

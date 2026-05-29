@@ -19,10 +19,14 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
     },
     useCustomConfig: (builder) => {
       const graphStyles = ['Graph styles'];
+      const lineStyles = ['Graph styles', 'Lines'];
+      const fillStyles = ['Graph styles', 'Fill'];
+      const pointStyles = ['Graph styles', 'Points'];
+      const barStyles = ['Graph styles', 'Bars'];
       const stacking = ['Stacking'];
       const axis = ['Axis'];
-      const visibility = ['Visibility'];
       const thresholds = ['Thresholds'];
+      const advanced = ['Advanced'];
 
       builder
         .addRadio({
@@ -41,7 +45,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addRadio({
           path: 'lineInterpolation',
           name: 'Line interpolation',
-          category: graphStyles,
+          category: lineStyles,
           defaultValue: 'stepAfter',
           settings: {
             options: [
@@ -55,7 +59,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addSliderInput({
           path: 'lineWidth',
           name: 'Line width',
-          category: graphStyles,
+          category: lineStyles,
           defaultValue: 1.5,
           settings: {
             min: 0,
@@ -63,23 +67,34 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
             step: 0.5,
           },
         })
+        .addSliderInput({
+          path: 'lineOpacity',
+          name: 'Line opacity',
+          category: lineStyles,
+          defaultValue: 0.95,
+          settings: {
+            min: 0,
+            max: 1,
+            step: 0.05,
+          },
+        })
         .addRadio({
-          path: 'lineStyle',
+          path: 'lineStyle.fill',
           name: 'Line style',
-          category: graphStyles,
-          defaultValue: { fill: 'solid' },
+          category: lineStyles,
+          defaultValue: 'solid',
           settings: {
             options: [
-              { value: { fill: 'solid' }, label: 'Solid' },
-              { value: { fill: 'dash' }, label: 'Dash' },
-              { value: { fill: 'dot' }, label: 'Dots' },
+              { value: 'solid', label: 'Solid' },
+              { value: 'dash', label: 'Dash' },
+              { value: 'dot', label: 'Dots' },
             ],
           },
         })
         .addSliderInput({
           path: 'fillOpacity',
           name: 'Fill opacity',
-          category: graphStyles,
+          category: fillStyles,
           defaultValue: 0,
           settings: {
             min: 0,
@@ -90,7 +105,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addRadio({
           path: 'gradientMode',
           name: 'Gradient mode',
-          category: graphStyles,
+          category: fillStyles,
           defaultValue: 'none',
           settings: {
             options: [
@@ -104,13 +119,13 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addBooleanSwitch({
           path: 'spanNulls',
           name: 'Connect null values',
-          category: graphStyles,
+          category: lineStyles,
           defaultValue: true,
         })
         .addRadio({
           path: 'showPoints',
           name: 'Show points',
-          category: graphStyles,
+          category: pointStyles,
           defaultValue: 'auto',
           settings: {
             options: [
@@ -123,7 +138,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addSliderInput({
           path: 'pointSize',
           name: 'Point size',
-          category: graphStyles,
+          category: pointStyles,
           defaultValue: 4,
           settings: {
             min: 1,
@@ -134,7 +149,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addSliderInput({
           path: 'barWidthFactor',
           name: 'Bar width factor',
-          category: graphStyles,
+          category: barStyles,
           defaultValue: 0.6,
           settings: {
             min: 0.05,
@@ -145,28 +160,13 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addSliderInput({
           path: 'barMaxWidth',
           name: 'Bar max width',
-          category: graphStyles,
+          category: barStyles,
           defaultValue: 18,
           settings: {
             min: 1,
             max: 100,
             step: 1,
           },
-        })
-        .addColorPicker({
-          path: 'lineColor',
-          name: 'Line color',
-          category: graphStyles,
-        })
-        .addColorPicker({
-          path: 'fillColor',
-          name: 'Fill color',
-          category: graphStyles,
-        })
-        .addColorPicker({
-          path: 'pointColor',
-          name: 'Point color',
-          category: graphStyles,
         })
         .addRadio({
           path: 'stacking',
@@ -191,18 +191,6 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
           name: 'Soft max',
           category: axis,
         })
-        .addBooleanSwitch({
-          path: 'hideFrom.viz',
-          name: 'Hide in visualization',
-          category: visibility,
-          defaultValue: false,
-        })
-        .addBooleanSwitch({
-          path: 'hideFrom.legend',
-          name: 'Hide in legend',
-          category: visibility,
-          defaultValue: false,
-        })
         .addRadio({
           path: 'thresholdsStyle.mode',
           name: 'Show thresholds',
@@ -219,7 +207,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         .addRadio({
           path: 'transform',
           name: 'Transform',
-          category: graphStyles,
+          category: advanced,
           settings: {
             options: [
               { value: undefined, label: 'None' },
@@ -230,10 +218,17 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
     },
   })
   .setPanelOptions((builder) => {
+    const horizon = ['Horizon'];
+    const timeline = ['Timeline'];
+    const yAxis = ['Y-axis'];
+    const colors = ['Colors'];
+    const legend = ['Legend'];
+
     return builder
       .addSliderInput({
         path: 'compressionFocusHours',
         name: 'Compression focus (hours)',
+        category: horizon,
         defaultValue: defaultOptions.compressionFocusHours,
         settings: {
           min: 1,
@@ -245,6 +240,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         path: 'aggregationMode',
         defaultValue: defaultOptions.aggregationMode,
         name: 'Bucket aggregation',
+        category: horizon,
         settings: {
           options: [
             {
@@ -262,6 +258,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         path: 'yScaleMode',
         defaultValue: defaultOptions.yScaleMode,
         name: 'Y-axis scale',
+        category: yAxis,
         settings: {
           options: [
             {
@@ -279,6 +276,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         path: 'yAxisLowerBound',
         defaultValue: defaultOptions.yAxisLowerBound,
         name: 'Y-axis lower bound',
+        category: yAxis,
         settings: {
           options: [
             {
@@ -296,6 +294,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         path: 'colorPalette',
         defaultValue: defaultOptions.colorPalette,
         name: 'Color palette',
+        category: colors,
         settings: {
           options: [
             {
@@ -317,29 +316,16 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
           ],
         },
       })
-      .addSliderInput({
-        path: 'lineOpacity',
-        name: 'Line opacity',
-        defaultValue: defaultOptions.lineOpacity,
-        settings: {
-          min: 0,
-          max: 1,
-          step: 0.05,
-        },
-      })
-      .addBooleanSwitch({
-        path: 'showLegend',
-        name: 'Show legend',
-        defaultValue: defaultOptions.showLegend,
-      })
       .addBooleanSwitch({
         path: 'showXAxisLabels',
         name: 'Show X-axis labels',
+        category: timeline,
         defaultValue: defaultOptions.showXAxisLabels,
       })
       .addSliderInput({
         path: 'dayBandOpacity',
         name: 'Day band brightness',
+        category: timeline,
         defaultValue: defaultOptions.dayBandOpacity,
         settings: {
           min: 0,
@@ -348,11 +334,16 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         },
       })
       .addRadio({
-        path: 'legendPlacement',
-        defaultValue: defaultOptions.legendPlacement,
-        name: 'Legend placement',
+        path: 'legendMode',
+        defaultValue: defaultOptions.legendMode,
+        name: 'Legend',
+        category: legend,
         settings: {
           options: [
+            {
+              value: 'hidden',
+              label: 'Hidden',
+            },
             {
               value: 'right',
               label: 'Right',
@@ -368,6 +359,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
         path: 'legendSortMode',
         defaultValue: defaultOptions.legendSortMode,
         name: 'Legend order',
+        category: legend,
         settings: {
           options: [
             {

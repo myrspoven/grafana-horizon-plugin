@@ -3,6 +3,7 @@ import { NonlinearTimeScale } from '../scales/nonlinearTime';
 import { AggregationMode, HorizonOptions } from '../types';
 
 const BUCKET_PIXEL_WIDTH = 2;
+const GAP_FILL_SAMPLE_INTERVAL_MULTIPLIER = 1.75;
 
 interface Bucket {
   time: number;
@@ -50,6 +51,40 @@ function bucketToPoint(bucket: Bucket, options: HorizonOptions): TimeSeriesPoint
   };
 }
 
+function estimateSampleInterval(points: TimeSeriesPoint[], scale: NonlinearTimeScale): number | undefined {
+  const visibleTimes = points
+    .filter((point) => point.time >= scale.domainStart && point.time <= scale.domainEnd)
+    .map((point) => point.time)
+    .sort((a, b) => a - b);
+
+  const intervals: number[] = [];
+
+  for (let index = 1; index < visibleTimes.length; index++) {
+    const interval = visibleTimes[index] - visibleTimes[index - 1];
+
+    if (interval > 0) {
+      intervals.push(interval);
+    }
+  }
+
+  if (intervals.length === 0) {
+    return undefined;
+  }
+
+  intervals.sort((a, b) => a - b);
+
+  // Prefer the lower end of observed intervals so occasional long idle periods do not become the assumed cadence.
+  return intervals[Math.floor((intervals.length - 1) * 0.2)];
+}
+
+function shouldFillMissingBucket(previousBucket: Bucket | undefined, nextBucket: Bucket | undefined, sampleInterval: number | undefined): boolean {
+  if (!previousBucket || !nextBucket || !sampleInterval) {
+    return false;
+  }
+
+  return nextBucket.time - previousBucket.time > sampleInterval * GAP_FILL_SAMPLE_INTERVAL_MULTIPLIER;
+}
+
 function aggregatePoints(
   points: TimeSeriesPoint[],
   scale: NonlinearTimeScale,
@@ -93,21 +128,32 @@ function aggregatePoints(
   }
 
   const bucketIndexes = Array.from(buckets.keys());
-  const firstBucketIndex = Math.min(...bucketIndexes);
-  const lastBucketIndex = Math.max(...bucketIndexes);
+  const sortedBucketIndexes = bucketIndexes.sort((a, b) => a - b);
+  const firstBucketIndex = sortedBucketIndexes[0];
+  const lastBucketIndex = sortedBucketIndexes[sortedBucketIndexes.length - 1];
+  const sampleInterval = estimateSampleInterval(points, scale);
   const result: TimeSeriesPoint[] = [];
+  let previousBucket: Bucket | undefined;
+  let nextBucketCursor = 0;
 
   for (let bucketIndex = firstBucketIndex; bucketIndex <= lastBucketIndex; bucketIndex++) {
     const bucket = buckets.get(bucketIndex);
 
-    result.push(
-      bucket
-        ? bucketToPoint(bucket, options)
-        : {
-            time: getBucketTime(bucketIndex, scale),
-            value: 0,
-          }
-    );
+    while (sortedBucketIndexes[nextBucketCursor] <= bucketIndex) {
+      nextBucketCursor += 1;
+    }
+
+    const nextBucket = bucket ? bucket : buckets.get(sortedBucketIndexes[nextBucketCursor]);
+
+    if (bucket) {
+      result.push(bucketToPoint(bucket, options));
+      previousBucket = bucket;
+    } else if (shouldFillMissingBucket(previousBucket, nextBucket, sampleInterval)) {
+      result.push({
+        time: getBucketTime(bucketIndex, scale),
+        value: 0,
+      });
+    }
   }
 
   return result.sort((a, b) => a.time - b.time);

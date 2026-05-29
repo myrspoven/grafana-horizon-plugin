@@ -10,13 +10,13 @@ It renders a continuous nonlinear time axis using a `log1p(age)` projection: rec
 - Automatic screen-space aggregation, so older compressed history is grouped into larger real-time buckets.
 - Multiple numeric time series from Grafana data frames, including Prometheus query results.
 - Configurable aggregation mode: max or average.
-- Linear or zero-safe `log1p` Y-axis.
+- Linear or signed `log1p` Y-axis.
 - Optional Y-axis lower bound at zero or the smallest visible series value.
 - Hourly vertical markers for the current day and daily markers for older history.
 - Optional collision-aware X-axis labels with hours for the last range day and day labels for older history.
 - Alternating day background bands for easier temporal scanning.
 - Grafana field color overrides with palette fallback.
-- Legend placement and ordering, line width, line opacity, fill opacity, gradient mode, line style, null connection, point visibility, stacking, and common Grafana TimeSeries field override options.
+- Legend display and ordering, line width, line opacity, fill opacity, gradient mode, line style, null connection, point visibility, stacking, and common Grafana TimeSeries field override options.
 - Grafana field thresholds rendered as optional dashed threshold lines.
 - Clickable legend rows for temporarily showing or hiding series.
 
@@ -29,7 +29,7 @@ This plugin is early and currently optimized for operational throughput/count da
 - Node.js 22 or newer.
 - npm 10 or newer.
 - Docker, for the local Grafana development server.
-- Grafana 12.3.0 or newer.
+- Grafana 9.2.0 or newer.
 
 ## Development
 
@@ -75,16 +75,15 @@ Useful options:
 - **Compression focus** controls how much recent time receives the most horizontal space.
 - **Aggregation** chooses max or average for automatic buckets.
 - **Y-axis scale** switches between linear and `log1p`.
-- **Y-axis lower bound** keeps the baseline at zero or at the visible series minimum.
+- **Y-axis lower bound** keeps the baseline at zero or at the visible series minimum. Grafana's standard field **Min** and **Max** settings act as hard y-axis bounds when configured.
 - **Palette** controls fallback colors when Grafana field colors are not set.
-- **Legend placement** moves the legend to the right or bottom.
+- **Legend** hides the legend or places it on the right or bottom.
 - **Legend order** keeps query order, sorts alphabetically, or sorts by last value and then max value.
 - **Show X-axis labels** toggles hourly and daily labels on the nonlinear timeline.
 - **Day band brightness** tunes the alternating background stripe intensity.
-- **Line opacity** tunes the global line/point opacity.
-- Graph styling such as line interpolation, line style, line width, fill opacity, gradient mode, connect null values, show points, stack series, and threshold display is configured through Grafana field defaults or field overrides.
+- Graph styling such as line interpolation, line style, line width, line opacity, fill opacity, gradient mode, connect null values, show points, stack series, and threshold display is configured through Grafana field defaults or field overrides.
 
-Series-specific colors are configured with Grafana field overrides: add an override for a field, choose **Standard options > Color scheme**, and set a single color. Thresholds use Grafana's standard field threshold editor. Field defaults and overrides also support TimeSeries-style settings such as draw style, line interpolation, line width, fill opacity, gradient mode, line style, connect null values, show points, point size, stacking, soft axis bounds, hide-from-visualization, and negative-Y transform where they fit the nonlinear renderer.
+Series-specific colors are configured with Grafana field overrides: add an override for a field, choose **Standard options > Color scheme**, and set a single color. Decimal settings are used for legend and threshold labels, and a shared unit is shown as a Y-axis label. Thresholds use Grafana's standard field threshold editor. Field defaults and overrides also support TimeSeries-style settings such as draw style, line interpolation, line width, fill opacity, gradient mode, line style, connect null values, show points, point size, stacking, soft axis bounds, and negative-Y transform where they fit the nonlinear renderer.
 
 Legend clicks hide or show a series within the panel. This is local display state and does not change the Grafana query.
 
