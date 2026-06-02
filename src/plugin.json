@@ -35,6 +35,10 @@
       {
         "name": "14 day overview with detailed recent data, linear y-scale",
         "path": "img/10-days-overview.png"
+      },
+      {
+        "name": "Chart with a significant drop 4 days ago. Extending the chart from 3 to 10 days only takes ~25% extra space",
+        "path": "img/changes-4-days-ago.png"
       }
     ],
     "version": "%VERSION%",
