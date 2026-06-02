@@ -20,12 +20,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jonashogstrom/myrspoven-horizon-plugin.git"
+    "url": "https://github.com/myrspoven/grafana-horizon-plugin.git"
   },
   "bugs": {
-    "url": "https://github.com/jonashogstrom/myrspoven-horizon-plugin/issues"
+    "url": "https://github.com/myrspoven/grafana-horizon-plugin/issues"
   },
-  "homepage": "https://github.com/jonashogstrom/myrspoven-horizon-plugin#readme",
+  "homepage": "https://github.com/myrspoven/grafana-horizon-plugin#readme",
   "keywords": [
     "grafana",
     "grafana-panel",
