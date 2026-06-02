@@ -1,0 +1,51 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "panel",
+  "name": "Horizon",
+  "id": "myrspoven-horizon-panel",
+  "info": {
+    "keywords": ["panel", "timeline", "prometheus", "observability", "nonlinear"],
+    "description": "Nonlinear context-compressed time series panel for operational Grafana dashboards.",
+    "author": {
+      "name": "myrspoven"
+    },
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Repository",
+        "url": "https://github.com/jonashogstrom/myrspoven-horizon-plugin"
+      },
+      {
+        "name": "Issues",
+        "url": "https://github.com/jonashogstrom/myrspoven-horizon-plugin/issues"
+      }
+    ],
+    "screenshots": [
+      {
+        "name": "Horizon panel with nonlinear time axis, log1p yscale",
+        "path": "img/panel-overview.png"
+      },
+      {
+        "name": "Tooltips on mouse over",
+        "path": "img/panel-tooltip.png"
+      },
+      {
+        "name": "14 day overview with detailed recent data, linear y-scale",
+        "path": "img/10-days-overview.png"
+      },
+      {
+        "name": "Chart with a significant drop 4 days ago. Extending the chart from 3 to 10 days only takes ~25% extra space",
+        "path": "img/changes-4-days-ago.png"
+      }
+    ],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=9.2.0",
+    "plugins": []
+  }
+}

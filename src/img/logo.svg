@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Horizon panel logo</title>
+  <desc id="desc">A time series over an axis where older time intervals are compressed toward the horizon.</desc>
+  <defs>
+    <linearGradient id="panel" x1="18" x2="110" y1="18" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#172033"/>
+      <stop offset="1" stop-color="#0b0f18"/>
+    </linearGradient>
+    <linearGradient id="series" x1="26" x2="105" y1="82" y2="39" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5794f2"/>
+      <stop offset="0.58" stop-color="#73bf69"/>
+      <stop offset="1" stop-color="#ff9830"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="22" fill="#111217"/>
+  <rect x="16" y="16" width="96" height="96" rx="16" fill="url(#panel)" stroke="#2a3446" stroke-width="2"/>
+
+  <path d="M25 88H104" stroke="#d8e2f2" stroke-linecap="round" stroke-opacity="0.32" stroke-width="4"/>
+
+  <g stroke="#d8e2f2" stroke-linecap="round" stroke-width="4">
+    <path d="M28 51V88" opacity="0.16"/>
+    <path d="M38 51V88" opacity="0.22"/>
+    <path d="M51 51V88" opacity="0.32"/>
+    <path d="M68 51V88" opacity="0.48"/>
+    <path d="M88 51V88" opacity="0.72"/>
+    <path d="M104 51V88" opacity="0.95"/>
+  </g>
+
+  <path
+    d="M28 79L38 79L38 72L51 72L51 76L68 76L68 61L88 61L88 67L104 67"
+    fill="none"
+    stroke="url(#series)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="7"
+  />
+</svg>
