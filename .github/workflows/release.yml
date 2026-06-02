@@ -57,6 +57,11 @@ jobs:
           echo "plugin_version=$plugin_version" >> "$GITHUB_OUTPUT"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
+      - name: Attest plugin package
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ steps.package.outputs.archive }}
+
       - name: Check plugin metadata
         shell: bash
         run: |

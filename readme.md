@@ -138,7 +138,7 @@ Recommended organization setup:
 - Release workflow: `.github/workflows/release.yml`.
 - CI workflow: `.github/workflows/ci.yml`.
 
-After transfer, create releases from version tags such as `v0.1.0`. The release workflow builds, signs, validates, packages, and uploads the plugin ZIP as a draft GitHub release.
+After transfer, create releases from version tags such as `v0.1.0`. The release workflow builds, signs, packages, attests, validates, and uploads the plugin ZIP as a draft GitHub release.
 
 ## Releases
 
@@ -164,7 +164,7 @@ Release builds are handled by GitHub Actions.
    git push origin v0.1.0
    ```
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which builds the plugin, signs it with Grafana's signing tool, validates the package metadata, and uploads the ZIP and checksum to a draft GitHub release. To sign release builds, add a repository secret named `GRAFANA_ACCESS_POLICY_TOKEN`.
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which builds the plugin, signs it with Grafana's signing tool, creates a GitHub provenance attestation for the ZIP, validates the package metadata, and uploads the ZIP and checksum to a draft GitHub release. To sign release builds, add a repository secret named `GRAFANA_ACCESS_POLICY_TOKEN`.
 
 ## Repository Notes
 
