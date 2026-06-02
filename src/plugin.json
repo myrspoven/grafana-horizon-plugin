@@ -23,7 +23,20 @@
         "url": "https://github.com/jonashogstrom/myrspoven-horizon-plugin/issues"
       }
     ],
-    "screenshots": [],
+    "screenshots": [
+      {
+        "name": "Horizon panel with nonlinear time axis, log1p yscale",
+        "path": "img/panel-overview.png"
+      },
+      {
+        "name": "Tooltips on mouse over",
+        "path": "img/panel-tooltip.png"
+      },
+      {
+        "name": "14 day overview with detailed recent data, linear y-scale",
+        "path": "img/10-days-overview.png"
+      }
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },

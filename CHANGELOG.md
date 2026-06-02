@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.1.0] - 2026-06-02
+
+### Added
+
+- Added public README content for Myrspoven and company GitHub organization publishing.
+- Added plugin manifest screenshots for overview, tooltip, and long-range examples.
+
+### Changed
+
+- Updated the plugin logo to better represent nonlinear historical time compression.
+- Prepared package metadata for the first public company release.
+
 ## [0.0.24] - 2026-06-02
 
 ### Added
