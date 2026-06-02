@@ -9,6 +9,7 @@ function linearScale(domainStart: number, domainEnd: number, width: number): Non
   return {
     domainStart,
     domainEnd,
+    invert: (x) => domainStart + (x / width) * (domainEnd - domainStart),
     width,
     x: (time) => ((time - domainStart) / (domainEnd - domainStart)) * width,
   };

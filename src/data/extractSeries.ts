@@ -59,6 +59,8 @@ export interface StandardTimeSeriesFieldConfig {
 }
 
 export interface TimeSeriesPoint {
+  intervalEnd?: number;
+  intervalStart?: number;
   time: number;
   value: number | null;
 }

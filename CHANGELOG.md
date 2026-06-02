@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.23] - 2026-06-02
+
+### Added
+
+- Added hover tooltips with bucket interval details and formatted values.
+- Added drag-to-zoom, Shift-drag pan, and double-click zoom-out interactions.
+- Added Ctrl-click external link support with bucket, dashboard, series, and value template variables.
+- Added a multiline Explore left JSON editor that builds relative `/explore?left=...` links from a JSON object.
+
+### Changed
+
+- Split legend rendering, SVG plot rendering, and series path generation into smaller modules.
+
+### Fixed
+
+- Preserved bucket interval metadata during adaptive aggregation so hover links can target the visible bucket range.
+
 ## [0.0.22] - 2026-05-29
 
 ### Fixed

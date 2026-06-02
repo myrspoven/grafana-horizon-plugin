@@ -53,4 +53,20 @@ describe('createNonlinearTimeScale', () => {
     expect(scale.domainStart).toBe(from);
     expect(scale.domainEnd).toBe(to);
   });
+
+  it('inverts plot positions back to time', () => {
+    const now = Date.UTC(2021, 0, 8);
+    const range = selectedRange(now);
+    const scale = createNonlinearTimeScale(defaultOptions, 1000, range.from, range.to);
+    const times = [
+      scale.domainStart,
+      scale.domainStart + (scale.domainEnd - scale.domainStart) * 0.25,
+      scale.domainStart + (scale.domainEnd - scale.domainStart) * 0.5,
+      scale.domainEnd,
+    ];
+
+    for (const time of times) {
+      expect(scale.invert(scale.x(time))).toBeCloseTo(time, -2);
+    }
+  });
 });

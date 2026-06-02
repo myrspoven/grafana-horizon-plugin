@@ -33,6 +33,27 @@ describe('aggregateSeries', () => {
     expect(result[0].points[0].value).toBe(9);
   });
 
+  it('adds bucket interval metadata to aggregated points', () => {
+    const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'max' }, 2, rangeStart, now);
+    const result = aggregateSeries(
+      [
+        {
+          id: 'a',
+          name: 'A',
+          points: [
+            { time: now - 20 * 60 * 1000, value: 9 },
+          ],
+        },
+      ],
+      scale,
+      { ...options, aggregationMode: 'max' }
+    );
+    const point = result[0].points[0];
+
+    expect(point.intervalStart).toBeLessThanOrEqual(point.time);
+    expect(point.intervalEnd).toBeGreaterThanOrEqual(point.time);
+  });
+
   it('averages bucket values when average aggregation is selected', () => {
     const scale = createNonlinearTimeScale({ ...options, aggregationMode: 'avg' }, 2, rangeStart, now);
     const result = aggregateSeries(

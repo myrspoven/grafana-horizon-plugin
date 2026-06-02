@@ -1,5 +1,6 @@
 import { FieldColorModeId, FieldConfigProperty, PanelPlugin } from '@grafana/data';
 import { StandardTimeSeriesFieldConfig } from './data/extractSeries';
+import { ExploreJsonEditor } from './components/ExploreJsonEditor';
 import { HorizonPanel } from './components/HorizonPanel';
 import { HorizonOptions, defaultOptions } from './types';
 
@@ -223,6 +224,7 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
     const yAxis = ['Y-axis'];
     const colors = ['Colors'];
     const legend = ['Legend'];
+    const interactions = ['Interactions'];
 
     return builder
       .addSliderInput({
@@ -376,5 +378,35 @@ export const plugin = new PanelPlugin<HorizonOptions, StandardTimeSeriesFieldCon
             },
           ],
         },
+      })
+      .addBooleanSwitch({
+        path: 'showTooltip',
+        name: 'Show tooltip',
+        category: interactions,
+        defaultValue: defaultOptions.showTooltip,
+      })
+      .addBooleanSwitch({
+        path: 'enableDragZoom',
+        name: 'Drag to zoom',
+        category: interactions,
+        defaultValue: defaultOptions.enableDragZoom,
+      })
+      .addCustomEditor({
+        id: 'exploreLeftJson',
+        path: 'exploreLeftJson',
+        name: 'Explore left JSON',
+        category: interactions,
+        editor: ExploreJsonEditor,
+        defaultValue: defaultOptions.exploreLeftJson,
+        description:
+          'Optional Grafana Explore left JSON object. The panel opens /explore?left=... and applies ${from}, ${to}, ${fromIso}, ${toIso}, ${series}, ${value}, ${dashboardFrom}, and ${dashboardTo}.',
+      })
+      .addTextInput({
+        path: 'externalLinkTemplate',
+        name: 'External link template',
+        category: interactions,
+        defaultValue: defaultOptions.externalLinkTemplate,
+        description:
+          'Optional fallback URL for non-Explore targets. Supports ${from}, ${to}, ${fromIso}, ${toIso}, ${series}, ${value}, ${dashboardFrom}, and ${dashboardTo}.',
       });
   });

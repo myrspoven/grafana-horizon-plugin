@@ -13,8 +13,12 @@ export interface HorizonOptions {
   aggregationMode: AggregationMode;
   colorPalette: ColorPalette;
   dayBandOpacity: number;
+  enableDragZoom: boolean;
+  exploreLeftJson: string;
+  externalLinkTemplate: string;
   legendMode: LegendMode;
   legendSortMode: LegendSortMode;
+  showTooltip: boolean;
   yAxisLowerBound: YAxisLowerBound;
   yScaleMode: YScaleMode;
   showXAxisLabels: boolean;
@@ -25,8 +29,12 @@ export const defaultOptions: HorizonOptions = {
   aggregationMode: 'max',
   colorPalette: 'grafana',
   dayBandOpacity: 32,
+  enableDragZoom: true,
+  exploreLeftJson: '',
+  externalLinkTemplate: '',
   legendMode: 'right',
   legendSortMode: 'original',
+  showTooltip: true,
   yAxisLowerBound: 'zero',
   yScaleMode: 'log1p',
   showXAxisLabels: true,

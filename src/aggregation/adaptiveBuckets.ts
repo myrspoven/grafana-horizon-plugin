@@ -26,26 +26,22 @@ function getBucketIndex(time: number, scale: NonlinearTimeScale): number {
   return Math.floor(scale.x(time) / BUCKET_PIXEL_WIDTH);
 }
 
-function getBucketTime(bucketIndex: number, scale: NonlinearTimeScale): number {
-  const targetX = Math.min(scale.width, bucketIndex * BUCKET_PIXEL_WIDTH + BUCKET_PIXEL_WIDTH / 2);
-  let low = scale.domainStart;
-  let high = scale.domainEnd;
+function getBucketInterval(bucketIndex: number, scale: NonlinearTimeScale): { end: number; start: number } {
+  const startX = Math.max(0, bucketIndex * BUCKET_PIXEL_WIDTH);
+  const endX = Math.min(scale.width, startX + BUCKET_PIXEL_WIDTH);
 
-  for (let index = 0; index < 32; index++) {
-    const mid = low + (high - low) / 2;
-
-    if (scale.x(mid) < targetX) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-
-  return low + (high - low) / 2;
+  return {
+    end: scale.invert(endX),
+    start: scale.invert(startX),
+  };
 }
 
-function bucketToPoint(bucket: Bucket, options: HorizonOptions): TimeSeriesPoint {
+function bucketToPoint(bucket: Bucket, bucketIndex: number, scale: NonlinearTimeScale, options: HorizonOptions): TimeSeriesPoint {
+  const interval = getBucketInterval(bucketIndex, scale);
+
   return {
+    intervalEnd: interval.end,
+    intervalStart: interval.start,
     time: bucket.timeSum / Math.max(1, bucket.count + bucket.nullCount),
     value: bucket.count === 0 ? 0 : aggregateValue(bucket, options.aggregationMode),
   };
@@ -146,11 +142,14 @@ function aggregatePoints(
     const nextBucket = bucket ? bucket : buckets.get(sortedBucketIndexes[nextBucketCursor]);
 
     if (bucket) {
-      result.push(bucketToPoint(bucket, options));
+      result.push(bucketToPoint(bucket, bucketIndex, scale, options));
       previousBucket = bucket;
     } else if (shouldFillMissingBucket(previousBucket, nextBucket, sampleInterval)) {
+      const interval = getBucketInterval(bucketIndex, scale);
       result.push({
-        time: getBucketTime(bucketIndex, scale),
+        intervalEnd: interval.end,
+        intervalStart: interval.start,
+        time: interval.start + (interval.end - interval.start) / 2,
         value: 0,
       });
     }

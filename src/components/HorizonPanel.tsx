@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, useState } from 'react';
+import React, { useState } from 'react';
 import { FieldColorModeId, getDisplayProcessor, PanelProps, Threshold, ThresholdsMode } from '@grafana/data';
 import { css, cx } from '@emotion/css';
 import { useStyles2, useTheme2 } from '@grafana/ui';
@@ -15,6 +15,8 @@ import { createNonlinearTimeScale } from '../scales/nonlinearTime';
 import { createValueScale } from '../scales/valueScale';
 import { generateTemporalMarkers } from '../rendering/markers';
 import { generateTemporalLabels } from '../rendering/timeLabels';
+import { HorizonPlot, PlotSeriesStyle } from './HorizonPlot';
+import { HorizonLegend, HorizonLegendRow } from './HorizonLegend';
 import {
   ColorPalette,
   GradientMode,
@@ -43,6 +45,22 @@ interface DayBand {
   key: string;
   start: number;
   end: number;
+}
+
+interface DragState {
+  currentX: number;
+  mode: 'pan' | 'zoom';
+  startX: number;
+}
+
+interface HoverState {
+  intervalEnd: number;
+  intervalStart: number;
+  link?: string;
+  plotX: number;
+  plotY: number;
+  seriesName: string;
+  value: string;
 }
 
 interface ResolvedSeriesStyle {
@@ -105,54 +123,29 @@ const getStyles = () => ({
   `,
   svg: css`
     display: block;
+    cursor: crosshair;
   `,
-  legend: css`
-    display: grid;
-    gap: 4px;
-    grid-template-columns: 1fr 48px 48px;
-    overflow: hidden;
+  tooltip: css`
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+    font-size: 11px;
+    line-height: 16px;
+    max-width: 280px;
+    padding: 6px 8px;
+    pointer-events: none;
     position: absolute;
+    z-index: 2;
   `,
-  legendHeader: css`
-    font-size: 11px;
+  tooltipTitle: css`
     font-weight: 600;
-    line-height: 16px;
-    text-align: right;
-  `,
-  legendName: css`
-    align-items: center;
-    display: flex;
-    font-size: 11px;
-    gap: 8px;
-    line-height: 16px;
-    min-width: 0;
-  `,
-  legendSwatch: css`
-    flex: 0 0 auto;
-    height: 3px;
-    width: 14px;
-  `,
-  legendText: css`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   `,
-  legendValue: css`
-    font-size: 11px;
-    line-height: 16px;
-    text-align: right;
-  `,
-  legendToggle: css`
-    cursor: pointer;
-    user-select: none;
-
-    &:focus-visible {
-      outline: 1px solid currentColor;
-      outline-offset: 2px;
-    }
-  `,
-  legendHidden: css`
-    opacity: 0.38;
+  tooltipLink: css`
+    display: inline-block;
+    margin-top: 4px;
+    pointer-events: auto;
   `,
 });
 
@@ -167,6 +160,72 @@ function formatValue(value: number | null, item: TimeSeries | undefined, theme: 
   }
 
   return getDisplayValue(value, item, theme).text;
+}
+
+function formatTooltipTime(time: number): string {
+  return new Date(time).toLocaleString(undefined, {
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+  });
+}
+
+function replaceLinkToken(template: string, key: string, value: string | number): string {
+  const stringValue = String(value);
+  return template
+    .replace(new RegExp(`\\$\\{${key}\\}`, 'g'), stringValue)
+    .replace(new RegExp(`%24%7B${key}%7D`, 'gi'), encodeURIComponent(stringValue));
+}
+
+function applyLinkTokens(
+  template: string,
+  hover: Omit<HoverState, 'link' | 'plotX' | 'plotY'>,
+  dashboardFrom: number,
+  dashboardTo: number
+): string {
+  return [
+    ['from', hover.intervalStart],
+    ['to', hover.intervalEnd],
+    ['fromIso', new Date(hover.intervalStart).toISOString()],
+    ['toIso', new Date(hover.intervalEnd).toISOString()],
+    ['series', encodeURIComponent(hover.seriesName)],
+    ['seriesRaw', hover.seriesName],
+    ['value', encodeURIComponent(hover.value)],
+    ['valueRaw', hover.value],
+    ['dashboardFrom', dashboardFrom],
+    ['dashboardTo', dashboardTo],
+  ].reduce((url, [key, value]) => replaceLinkToken(url, String(key), value), template);
+}
+
+function buildExploreLink(
+  leftJson: string,
+  hover: Omit<HoverState, 'link' | 'plotX' | 'plotY'>,
+  dashboardFrom: number,
+  dashboardTo: number
+): string | undefined {
+  const trimmedJson = leftJson.trim();
+
+  if (!trimmedJson) {
+    return undefined;
+  }
+
+  return `/explore?left=${applyLinkTokens(trimmedJson, hover, dashboardFrom, dashboardTo)}`;
+}
+
+function buildExternalLink(
+  template: string,
+  hover: Omit<HoverState, 'link' | 'plotX' | 'plotY'>,
+  dashboardFrom: number,
+  dashboardTo: number
+): string | undefined {
+  const trimmedTemplate = template.trim();
+
+  if (!trimmedTemplate) {
+    return undefined;
+  }
+
+  return applyLinkTokens(trimmedTemplate, hover, dashboardFrom, dashboardTo);
 }
 
 function getUnitLabel(series: TimeSeries[], theme: Theme2): string | undefined {
@@ -261,35 +320,6 @@ function getSeriesStats(points: TimeSeriesPoint[]): SeriesStats {
   };
 }
 
-function splitRenderableSegments(points: TimeSeriesPoint[], connectNulls: boolean): TimeSeriesPoint[][] {
-  if (connectNulls) {
-    const connectedPoints = points.filter((point) => point.value !== null);
-    return connectedPoints.length > 0 ? [connectedPoints] : [];
-  }
-
-  const segments: TimeSeriesPoint[][] = [];
-  let currentSegment: TimeSeriesPoint[] = [];
-
-  for (const point of points) {
-    if (point.value === null) {
-      if (currentSegment.length > 0) {
-        segments.push(currentSegment);
-        currentSegment = [];
-      }
-
-      continue;
-    }
-
-    currentSegment.push(point);
-  }
-
-  if (currentSegment.length > 0) {
-    segments.push(currentSegment);
-  }
-
-  return segments;
-}
-
 function compareNullableDesc(left: number | null, right: number | null): number {
   if (left === right) {
     return 0;
@@ -344,65 +374,6 @@ function shouldRenderSeriesPoints(mode: PointVisibility, points: TimeSeriesPoint
   }
 
   return points.filter((point) => point.value !== null).length <= Math.max(24, plotWidth / 4);
-}
-
-function buildLinePath(
-  points: TimeSeriesPoint[],
-  x: (time: number) => number,
-  y: (value: number | null) => number,
-  interpolation: LineInterpolation
-): string {
-  if (points.length === 0) {
-    return '';
-  }
-
-  const [first, ...rest] = points;
-  const commands = [`M ${x(first.time).toFixed(2)} ${y(first.value).toFixed(2)}`];
-  let previous = first;
-
-  for (const point of rest) {
-    const previousX = x(previous.time);
-    const previousY = y(previous.value);
-    const pointX = x(point.time);
-    const pointY = y(point.value);
-
-    if (interpolation === 'stepAfter') {
-      commands.push(`H ${pointX.toFixed(2)}`);
-      commands.push(`V ${pointY.toFixed(2)}`);
-    } else if (interpolation === 'stepBefore') {
-      commands.push(`V ${pointY.toFixed(2)}`);
-      commands.push(`H ${pointX.toFixed(2)}`);
-    } else if (interpolation === 'smooth') {
-      const controlOffset = (pointX - previousX) / 2;
-      commands.push(
-        `C ${(previousX + controlOffset).toFixed(2)} ${previousY.toFixed(2)} ${(pointX - controlOffset).toFixed(2)} ${pointY.toFixed(2)} ${pointX.toFixed(2)} ${pointY.toFixed(2)}`
-      );
-    } else {
-      commands.push(`L ${pointX.toFixed(2)} ${pointY.toFixed(2)}`);
-    }
-
-    previous = point;
-  }
-
-  return commands.join(' ');
-}
-
-function buildStepAreaPath(
-  points: TimeSeriesPoint[],
-  x: (time: number) => number,
-  y: (value: number | null) => number,
-  baselineY: number,
-  interpolation: LineInterpolation
-): string {
-  const linePath = buildLinePath(points, x, y, interpolation);
-
-  if (!linePath) {
-    return '';
-  }
-
-  const first = points[0];
-  const last = points[points.length - 1];
-  return `${linePath} L ${x(last.time).toFixed(2)} ${baselineY.toFixed(2)} L ${x(first.time).toFixed(2)} ${baselineY.toFixed(2)} Z`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -791,17 +762,15 @@ function getAlternatingDayBands(domainStart: number, domainEnd: number): DayBand
   return bands;
 }
 
-function getSafeId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_-]/g, '-');
-}
-
-export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, timeRange }) => {
+export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, timeRange, onChangeTimeRange }) => {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
   const [panelInstanceId] = useState(() => `panel-${panelInstanceSequence++}`);
   const resolvedOptions = resolveOptions(options);
   const rawSeries = extractTimeSeries(data);
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(() => new Set());
+  const [dragState, setDragState] = useState<DragState | undefined>();
+  const [hoverState, setHoverState] = useState<HoverState | undefined>();
 
   if (rawSeries.length === 0) {
     return (
@@ -901,6 +870,160 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
           theme
         )
       : [];
+  const legendRows: HorizonLegendRow[] = legendSeries.map((item) => {
+    const seriesIndex = seriesIndexById.get(item.id) ?? 0;
+    const stats = getSeriesStats(item.points);
+
+    return {
+      color: getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme),
+      id: item.id,
+      isHidden: hiddenSeries.has(item.id),
+      last: formatValue(stats.last, item, theme),
+      max: formatValue(stats.max, item, theme),
+      name: item.name,
+    };
+  });
+  const findHoverState = (plotX: number, plotY: number): HoverState | undefined => {
+    const hoverTime = timeScale.invert(plotX);
+    let bestMatch:
+      | {
+          point: TimeSeriesPoint;
+          score: number;
+          series: TimeSeries;
+        }
+      | undefined;
+
+    for (const item of visibleSeries.filter((seriesItem) => !seriesItem.fieldConfig?.hideFrom?.tooltip)) {
+      for (const point of item.points) {
+        if (point.value === null) {
+          continue;
+        }
+
+        const intervalStart = point.intervalStart ?? point.time;
+        const intervalEnd = point.intervalEnd ?? point.time;
+        const pointX = timeScale.x(point.time);
+        const containsHoverTime = hoverTime >= intervalStart && hoverTime <= intervalEnd;
+        const xDistance = containsHoverTime ? 0 : Math.abs(pointX - plotX);
+
+        if (!containsHoverTime && xDistance > 18) {
+          continue;
+        }
+
+        const yDistance = Math.abs(valueScale.y(point.value) - plotY);
+        const score = xDistance * 3 + yDistance;
+
+        if (!bestMatch || score < bestMatch.score) {
+          bestMatch = {
+            point,
+            score,
+            series: item,
+          };
+        }
+      }
+    }
+
+    if (!bestMatch) {
+      return undefined;
+    }
+
+    const intervalStart = bestMatch.point.intervalStart ?? bestMatch.point.time;
+    const intervalEnd = bestMatch.point.intervalEnd ?? bestMatch.point.time;
+    const hover = {
+      intervalEnd,
+      intervalStart,
+      plotX,
+      plotY,
+      seriesName: bestMatch.series.name,
+      value: formatValue(bestMatch.point.value, bestMatch.series, theme),
+    };
+
+    return {
+      ...hover,
+      link:
+        buildExploreLink(resolvedOptions.exploreLeftJson, hover, rangeStart, rangeEnd) ??
+        buildExternalLink(resolvedOptions.externalLinkTemplate, hover, rangeStart, rangeEnd),
+    };
+  };
+  const applyTimeRange = (from: number, to: number) => {
+    const safeFrom = Math.round(Math.min(from, to));
+    const safeTo = Math.round(Math.max(from, to));
+
+    if (safeTo - safeFrom >= 1000) {
+      onChangeTimeRange({
+        from: safeFrom,
+        to: safeTo,
+      });
+    }
+  };
+  const handlePlotPointerDown = (event: React.PointerEvent<SVGSVGElement>, plotX: number) => {
+    if (!resolvedOptions.enableDragZoom || event.button !== 0 || event.ctrlKey) {
+      return;
+    }
+
+    setDragState({
+      currentX: plotX,
+      mode: event.shiftKey ? 'pan' : 'zoom',
+      startX: plotX,
+    });
+    setHoverState(undefined);
+  };
+  const handlePlotPointerMove = (event: React.PointerEvent<SVGSVGElement>, plotX: number, plotY: number) => {
+    if (dragState) {
+      setDragState({
+        ...dragState,
+        currentX: plotX,
+      });
+      setHoverState(undefined);
+      return;
+    }
+
+    if (resolvedOptions.showTooltip) {
+      setHoverState(findHoverState(plotX, plotY));
+    }
+  };
+  const handlePlotPointerUp = (_event: React.PointerEvent<SVGSVGElement>, plotX: number) => {
+    if (!dragState) {
+      return;
+    }
+
+    const dragDistance = Math.abs(plotX - dragState.startX);
+    const startTime = timeScale.invert(dragState.startX);
+    const endTime = timeScale.invert(plotX);
+
+    if (dragDistance >= 8) {
+      if (dragState.mode === 'pan') {
+        const delta = endTime - startTime;
+        applyTimeRange(rangeStart - delta, rangeEnd - delta);
+      } else {
+        applyTimeRange(startTime, endTime);
+      }
+    }
+
+    setDragState(undefined);
+  };
+  const handlePlotDoubleClick = () => {
+    if (!resolvedOptions.enableDragZoom) {
+      return;
+    }
+
+    const range = rangeEnd - rangeStart;
+    const center = rangeStart + range / 2;
+    applyTimeRange(center - range, center + range);
+  };
+  const handlePlotClick = (event: React.MouseEvent<SVGSVGElement>, plotX: number, plotY: number) => {
+    if (dragState || !event.ctrlKey) {
+      return;
+    }
+
+    const clickedHover = findHoverState(plotX, plotY);
+
+    if (!clickedHover?.link) {
+      return;
+    }
+
+    setHoverState(clickedHover);
+    window.open(clickedHover.link, '_blank', 'noopener,noreferrer');
+  };
   const toggleSeries = (seriesId: string) => {
     setHiddenSeries((previous) => {
       const next = new Set(previous);
@@ -913,12 +1036,6 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
       return next;
     });
-  };
-  const handleLegendKeyDown = (event: KeyboardEvent<HTMLDivElement>, seriesId: string) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      toggleSeries(seriesId);
-    }
   };
 
   return (
@@ -933,346 +1050,90 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
         `
       )}
     >
-      <svg
-        data-testid="horizon-panel-svg"
+      <HorizonPlot
         className={styles.svg}
-        width={width}
+        dayBandColor={dayBandColor}
+        dayBandOpacity={dayBandOpacity}
+        dayBands={dayBands}
+        getFillColor={(item, seriesIndex) => getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme)}
+        getGradientStops={(item, color, style, seriesIndex) =>
+          getGradientStops(
+            style.gradientMode === 'none' ? 'opacity' : style.gradientMode,
+            color,
+            style.fillOpacity,
+            resolvedOptions.colorPalette,
+            seriesIndex,
+            hasSeriesColorOverride(item)
+          )
+        }
+        getLineColor={(item, seriesIndex) => getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme)}
+        getPointColor={(item, seriesIndex) => getSeriesPointColor(item, resolvedOptions.colorPalette, seriesIndex, theme)}
+        getSeriesIndex={(item) => seriesIndexById.get(item.id) ?? 0}
+        getSeriesStyle={(item) => getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points) as PlotSeriesStyle}
+        gridColor={gridColor}
         height={height}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {shouldFill && (
-          <defs>
-            {renderSeries.map((item) => {
-              const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-              const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
-              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-              const gradientId = `horizon-fill-${panelInstanceId}-${getSafeId(item.id)}`;
-              const stops = getGradientStops(
-                style.gradientMode === 'none' ? 'opacity' : style.gradientMode,
-                color,
-                style.fillOpacity,
-                resolvedOptions.colorPalette,
-                seriesIndex,
-                hasSeriesColorOverride(item)
-              );
+        margin={margin}
+        onPlotDoubleClick={handlePlotDoubleClick}
+        onPlotClick={handlePlotClick}
+        onPlotPointerDown={handlePlotPointerDown}
+        onPlotPointerLeave={() => {
+          if (!dragState) {
+            setHoverState(undefined);
+          }
+        }}
+        onPlotPointerMove={handlePlotPointerMove}
+        onPlotPointerUp={handlePlotPointerUp}
+        panelInstanceId={panelInstanceId}
+        plotHeight={plotHeight}
+        plotWidth={plotWidth}
+        renderSeries={renderSeries}
+        selection={dragState?.mode === 'zoom' ? { endX: dragState.currentX, startX: dragState.startX } : undefined}
+        shouldFill={shouldFill}
+        temporalLabels={temporalLabels}
+        temporalMarkers={temporalMarkers}
+        textColor={textColor}
+        theme={theme}
+        thresholdLines={thresholdLines}
+        valueScale={valueScale}
+        width={width}
+        x={x}
+        y={y}
+        yAxisUnitLabel={yAxisUnitLabel}
+        zeroBaselineY={zeroBaselineY}
+      />
 
-              return (
-                <linearGradient
-                  key={gradientId}
-                  id={gradientId}
-                  x1="0"
-                  x2="0"
-                  y1={margin.top}
-                  y2={margin.top + plotHeight}
-                  gradientUnits="userSpaceOnUse"
-                >
-                  {stops.map((stop) => (
-                    <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} stopOpacity={stop.opacity} />
-                  ))}
-                </linearGradient>
-              );
-            })}
-          </defs>
-        )}
-
-        <g>
-          {dayBands.map((band) => {
-            const bandX = x(band.start);
-            const bandWidth = Math.max(0, x(band.end) - bandX);
-
-            return bandWidth > 0 ? (
-              <rect
-                key={band.key}
-                x={bandX}
-                y={margin.top}
-                width={bandWidth}
-                height={plotHeight}
-                fill={dayBandColor}
-                opacity={dayBandOpacity}
-              />
-            ) : null;
-          })}
-
-          {valueScale.ticks.map((tick) => (
-            <g key={tick.label}>
-              <line
-                x1={margin.left}
-                x2={margin.left + plotWidth}
-                y1={margin.top + tick.y}
-                y2={margin.top + tick.y}
-                stroke={gridColor}
-                strokeOpacity={0.5}
-              />
-              <text x={margin.left - 8} y={margin.top + tick.y + 4} fill={textColor} fontSize={11} textAnchor="end">
-                {tick.label}
-              </text>
-            </g>
-          ))}
-
-          {yAxisUnitLabel && (
-            <text
-              x={14}
-              y={margin.top + plotHeight / 2}
-              fill={textColor}
-              fontSize={11}
-              textAnchor="middle"
-              transform={`rotate(-90 14 ${margin.top + plotHeight / 2})`}
-            >
-              {yAxisUnitLabel}
-            </text>
+      {hoverState && (
+        <div
+          className={styles.tooltip}
+          style={{
+            background: theme.colors.background.secondary,
+            color: theme.colors.text.primary,
+            left: Math.max(4, Math.min(Math.max(4, width - 292), margin.left + hoverState.plotX + 12)),
+            top: Math.max(4, Math.min(Math.max(4, height - 92), margin.top + hoverState.plotY + 12)),
+          }}
+        >
+          <div className={styles.tooltipTitle}>{hoverState.seriesName}</div>
+          <div>{hoverState.value}</div>
+          <div>
+            {formatTooltipTime(hoverState.intervalStart)} - {formatTooltipTime(hoverState.intervalEnd)}
+          </div>
+          {hoverState.link && (
+            <a className={styles.tooltipLink} href={hoverState.link} rel="noreferrer" target="_blank">
+              Ctrl-click chart to open
+            </a>
           )}
-
-          {temporalMarkers.map((marker) => (
-            <g key={`${marker.time}:${marker.x}`}>
-              <line
-                x1={x(marker.time)}
-                x2={x(marker.time)}
-                y1={margin.top}
-                y2={margin.top + plotHeight}
-                stroke={gridColor}
-                strokeOpacity={marker.major ? 0.72 : 0.34}
-              />
-            </g>
-          ))}
-
-          {shouldFill &&
-            renderSeries.map((item) => {
-              const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-              const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
-              const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-              const gradientId = `horizon-fill-${panelInstanceId}-${getSafeId(item.id)}`;
-              const segments = style.fillOpacity > 0 ? splitRenderableSegments(item.points, style.spanNulls) : [];
-
-              return segments.map((segment, segmentIndex) => {
-                const areaPath = buildStepAreaPath(
-                  segment,
-                  x,
-                  y,
-                  zeroBaselineY,
-                  style.lineInterpolation
-                );
-
-                return areaPath ? (
-                  <path
-                    key={`${item.id}:fill:${segmentIndex}`}
-                    d={areaPath}
-                    fill={style.gradientMode === 'none' ? color : `url(#${gradientId})`}
-                    fillOpacity={style.gradientMode === 'none' ? style.fillOpacity : 1}
-                    stroke="none"
-                  />
-                ) : null;
-              });
-            })}
-
-          {renderSeries.map((item) => {
-            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
-            const color = getSeriesFillColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-
-            if (style.drawStyle !== 'bars') {
-              return null;
-            }
-
-            const nonNullPoints = item.points.filter((point) => point.value !== null);
-            const automaticWidth = nonNullPoints.length > 0 ? (plotWidth / nonNullPoints.length) * style.barWidthFactor : 1;
-            const barWidth = clamp(automaticWidth, 1, style.barMaxWidth ?? 18);
-            const baseline = zeroBaselineY;
-
-            return nonNullPoints.map((point) => {
-              const barTop = y(point.value);
-              const top = Math.min(barTop, baseline);
-              const barHeight = Math.max(1, Math.abs(baseline - barTop));
-
-              return (
-                <rect
-                  key={`${item.id}:bar:${point.time}`}
-                  x={x(point.time) - barWidth / 2}
-                  y={top}
-                  width={barWidth}
-                  height={barHeight}
-                  fill={color}
-                  fillOpacity={Math.max(style.fillOpacity, style.lineOpacity)}
-                />
-              );
-            });
-          })}
-
-          {renderSeries.map((item) => {
-            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
-            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-            const segments =
-              style.drawStyle === 'line' && style.lineWidth > 0
-                ? splitRenderableSegments(item.points, style.spanNulls)
-                : [];
-
-            return segments.map((segment, segmentIndex) => {
-              const path = buildLinePath(segment, x, y, style.lineInterpolation);
-
-              return path ? (
-                <path
-                  key={`${item.id}:line:${segmentIndex}`}
-                  d={path}
-                  fill="none"
-                  stroke={color}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray={style.lineDash}
-                  strokeOpacity={style.lineOpacity}
-                  strokeWidth={style.lineWidth}
-                />
-              ) : null;
-            });
-          })}
-
-          {renderSeries.map((item) => {
-            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const style = getResolvedSeriesStyle(item.fieldConfig, plotWidth, item.points);
-            const color = getSeriesPointColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-
-            if (style.pointVisibility === 'never') {
-              return null;
-            }
-
-            return item.points
-              .filter((point) => point.value !== null)
-              .map((point) => (
-                <circle
-                  key={`${item.id}:point:${point.time}`}
-                  cx={x(point.time)}
-                  cy={y(point.value)}
-                  fill={color}
-                  fillOpacity={style.lineOpacity}
-                  r={style.pointSize}
-                  stroke={theme.colors.background.primary}
-                  strokeWidth={Math.max(0.75, style.lineWidth * 0.4)}
-                />
-              ));
-          })}
-
-          {thresholdLines.map((threshold) => {
-            const thresholdY = y(threshold.value);
-
-            return (
-              <g key={threshold.key}>
-                <line
-                  x1={margin.left}
-                  x2={margin.left + plotWidth}
-                  y1={thresholdY}
-                  y2={thresholdY}
-                  stroke={threshold.color}
-                  strokeDasharray="5 4"
-                  strokeOpacity={0.78}
-                  strokeWidth={1}
-                />
-                {plotWidth > 140 && (
-                  <text
-                    x={margin.left + plotWidth - 6}
-                    y={thresholdY - 4}
-                    fill={threshold.color}
-                    fontSize={10}
-                    textAnchor="end"
-                  >
-                    {threshold.label}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          <line
-            x1={margin.left}
-            x2={margin.left + plotWidth}
-            y1={margin.top + plotHeight}
-            y2={margin.top + plotHeight}
-            stroke={theme.colors.border.medium}
-          />
-
-          {temporalLabels.map((label) => (
-            <text
-              key={label.key}
-              x={margin.left + label.x}
-              y={margin.top + plotHeight + 16}
-              fill={textColor}
-              fontSize={11}
-              textAnchor="middle"
-            >
-              {label.text}
-            </text>
-          ))}
-        </g>
-      </svg>
+        </div>
+      )}
 
       {showLegend && (
-        <div
-          data-testid="horizon-legend"
-          className={styles.legend}
-          style={
-            showBottomLegend
-              ? {
-                  bottom: 4,
-                  color: theme.colors.text.secondary,
-                  left: margin.left,
-                  maxHeight: legendHeight - 6,
-                  right: 8,
-                }
-              : {
-                  color: theme.colors.text.secondary,
-                  right: 8,
-                  top: 8,
-                  width: legendWidth,
-                }
-          }
-        >
-          <div />
-          <div className={styles.legendHeader}>Last</div>
-          <div className={styles.legendHeader}>Max</div>
-
-          {legendSeries.map((item) => {
-            const seriesIndex = seriesIndexById.get(item.id) ?? 0;
-            const color = getSeriesLineColor(item, resolvedOptions.colorPalette, seriesIndex, theme);
-            const stats = getSeriesStats(item.points);
-            const isHidden = hiddenSeries.has(item.id);
-            const toggleClassName = cx(styles.legendToggle, isHidden && styles.legendHidden);
-
-            return (
-              <React.Fragment key={item.id}>
-                <div
-                  aria-pressed={!isHidden}
-                  className={cx(styles.legendName, toggleClassName)}
-                  onClick={() => toggleSeries(item.id)}
-                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
-                  role="button"
-                  tabIndex={0}
-                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
-                >
-                  <span className={styles.legendSwatch} style={{ background: color }} />
-                  <span className={styles.legendText}>{item.name}</span>
-                </div>
-                <div
-                  className={cx(styles.legendValue, toggleClassName)}
-                  onClick={() => toggleSeries(item.id)}
-                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
-                  role="button"
-                  tabIndex={0}
-                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
-                >
-                  {formatValue(stats.last, item, theme)}
-                </div>
-                <div
-                  className={cx(styles.legendValue, toggleClassName)}
-                  onClick={() => toggleSeries(item.id)}
-                  onKeyDown={(event) => handleLegendKeyDown(event, item.id)}
-                  role="button"
-                  tabIndex={0}
-                  title={`${isHidden ? 'Show' : 'Hide'} ${item.name}`}
-                >
-                  {formatValue(stats.max, item, theme)}
-                </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
+        <HorizonLegend
+          height={legendHeight}
+          isBottom={showBottomLegend}
+          marginLeft={margin.left}
+          onToggle={toggleSeries}
+          rows={legendRows}
+          width={legendWidth}
+        />
       )}
     </div>
   );

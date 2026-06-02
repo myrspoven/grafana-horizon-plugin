@@ -1,6 +1,6 @@
 {
   "name": "myrspoven-horizon-panel",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "description": "Grafana panel plugin for nonlinear context-compressed time series dashboards.",
   "private": false,
   "scripts": {

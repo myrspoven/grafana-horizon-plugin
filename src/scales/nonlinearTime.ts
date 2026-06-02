@@ -4,6 +4,7 @@ export interface NonlinearTimeScale {
   domainStart: number;
   domainEnd: number;
   width: number;
+  invert: (x: number) => number;
   x: (time: number) => number;
 }
 
@@ -19,12 +20,20 @@ function createLogProjection(domainStart: number, domainEnd: number, width: numb
   const focus = Math.max(HOUR_MS, focusMs);
   const denominator = Math.log1p(totalAge / focus);
 
-  return (time: number): number => {
+  const x = (time: number): number => {
     const clampedTime = Math.max(domainStart, Math.min(domainEnd, time));
     const age = domainEnd - clampedTime;
     const compressedAge = Math.log1p(age / focus) / denominator;
     return width * (1 - compressedAge);
   };
+  const invert = (position: number): number => {
+    const clampedX = Math.max(0, Math.min(width, position));
+    const compressedAge = 1 - clampedX / Math.max(1, width);
+    const age = focus * (Math.exp(compressedAge * denominator) - 1);
+    return Math.max(domainStart, Math.min(domainEnd, domainEnd - age));
+  };
+
+  return { invert, x };
 }
 
 export function createNonlinearTimeScale(
@@ -44,8 +53,9 @@ export function createNonlinearTimeScale(
   const scale: NonlinearTimeScale = {
     domainStart,
     domainEnd,
+    invert: project.invert,
     width,
-    x: project,
+    x: project.x,
   };
 
   return scale;
