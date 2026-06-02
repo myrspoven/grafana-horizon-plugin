@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 No changes yet.
 
+## [0.0.24] - 2026-06-02
+
+### Added
+
+- Added Ctrl-wheel zoom around the cursor using a non-passive wheel listener so the page does not zoom at the same time.
+- Added y-axis click toggling between compressed log1p and linear scale.
+
+### Changed
+
+- Removed double-click zoom-out now that wheel zoom is available.
+- Reduced reserved bottom chart space below the x-axis labels.
+
 ## [0.0.23] - 2026-06-02
 
 ### Added

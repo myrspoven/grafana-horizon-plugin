@@ -1,4 +1,4 @@
-import React, { MouseEvent, PointerEvent } from 'react';
+import React, { MouseEvent, PointerEvent, useEffect, useRef } from 'react';
 
 import { TimeSeries } from '../data/extractSeries';
 import { TemporalMarker } from '../rendering/markers';
@@ -82,11 +82,12 @@ interface HorizonPlotProps {
   height: number;
   margin: PlotMargin;
   onPlotClick?: (event: MouseEvent<SVGSVGElement>, plotX: number, plotY: number) => void;
-  onPlotDoubleClick?: () => void;
   onPlotPointerDown?: (event: PointerEvent<SVGSVGElement>, plotX: number, plotY: number) => void;
   onPlotPointerLeave?: () => void;
   onPlotPointerMove?: (event: PointerEvent<SVGSVGElement>, plotX: number, plotY: number) => void;
   onPlotPointerUp?: (event: PointerEvent<SVGSVGElement>, plotX: number, plotY: number) => void;
+  onPlotWheel?: (event: WheelEvent, plotX: number, plotY: number) => void;
+  onYAxisClick?: () => void;
   panelInstanceId: string;
   plotHeight: number;
   plotWidth: number;
@@ -128,11 +129,12 @@ export function HorizonPlot({
   height,
   margin,
   onPlotClick,
-  onPlotDoubleClick,
   onPlotPointerDown,
   onPlotPointerLeave,
   onPlotPointerMove,
   onPlotPointerUp,
+  onPlotWheel,
+  onYAxisClick,
   panelInstanceId,
   plotHeight,
   plotWidth,
@@ -151,6 +153,8 @@ export function HorizonPlot({
   yAxisUnitLabel,
   zeroBaselineY,
 }: HorizonPlotProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
   const getPlotPosition = (event: PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     return {
@@ -176,22 +180,51 @@ export function HorizonPlot({
   };
   const handleClick = (event: MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+
+    if (localX >= 0 && localX < margin.left && localY >= margin.top && localY <= margin.top + plotHeight) {
+      onYAxisClick?.();
+      return;
+    }
+
     const plotX = Math.max(0, Math.min(plotWidth, event.clientX - rect.left - margin.left));
     const plotY = Math.max(0, Math.min(plotHeight, event.clientY - rect.top - margin.top));
     onPlotClick?.(event, plotX, plotY);
   };
+  useEffect(() => {
+    const svg = svgRef.current;
+
+    if (!svg || !onPlotWheel) {
+      return undefined;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      const rect = svg.getBoundingClientRect();
+      const plotX = Math.max(0, Math.min(plotWidth, event.clientX - rect.left - margin.left));
+      const plotY = Math.max(0, Math.min(plotHeight, event.clientY - rect.top - margin.top));
+      onPlotWheel(event, plotX, plotY);
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, [margin.left, margin.top, onPlotWheel, plotHeight, plotWidth]);
+
   const selectionX = selection ? Math.min(selection.startX, selection.endX) : 0;
   const selectionWidth = selection ? Math.abs(selection.endX - selection.startX) : 0;
 
   return (
     <svg
       data-testid="horizon-panel-svg"
+      ref={svgRef}
       className={className}
       width={width}
       height={height}
       xmlns="http://www.w3.org/2000/svg"
       onClick={handleClick}
-      onDoubleClick={onPlotDoubleClick}
       onPointerDown={handlePointerDown}
       onPointerLeave={onPlotPointerLeave}
       onPointerMove={handlePointerMove}
@@ -258,6 +291,17 @@ export function HorizonPlot({
             </text>
           </g>
         ))}
+
+        <rect
+          x={0}
+          y={margin.top}
+          width={margin.left}
+          height={plotHeight}
+          fill="transparent"
+          cursor="pointer"
+        >
+          <title>Toggle Y-axis scale</title>
+        </rect>
 
         {yAxisUnitLabel && (
           <text

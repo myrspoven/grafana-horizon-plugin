@@ -762,7 +762,15 @@ function getAlternatingDayBands(domainStart: number, domainEnd: number): DayBand
   return bands;
 }
 
-export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, timeRange, onChangeTimeRange }) => {
+export const HorizonPanel: React.FC<Props> = ({
+  options,
+  data,
+  width,
+  height,
+  timeRange,
+  onChangeTimeRange,
+  onOptionsChange,
+}) => {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
   const [panelInstanceId] = useState(() => `panel-${panelInstanceSequence++}`);
@@ -796,12 +804,12 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
   const showLegend = showRightLegend || showBottomLegend;
   const legendWidth = showRightLegend ? Math.min(250, Math.max(190, width * 0.28)) : 0;
   const legendHeight = showBottomLegend ? Math.min(120, Math.max(44, 24 + rawSeries.length * 18)) : 0;
-  const xAxisLabelHeight = resolvedOptions.showXAxisLabels ? 16 : 0;
+  const xAxisLabelHeight = resolvedOptions.showXAxisLabels ? 22 : 6;
   const yAxisUnitLabel = getUnitLabel(rawSeries, theme);
   const margin = {
     top: 14,
     right: legendWidth + 14,
-    bottom: 24 + xAxisLabelHeight + legendHeight,
+    bottom: xAxisLabelHeight + legendHeight,
     left: yAxisUnitLabel ? 52 : 36,
   };
   const plotWidth = Math.max(1, width - margin.left - margin.right);
@@ -1001,14 +1009,26 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
 
     setDragState(undefined);
   };
-  const handlePlotDoubleClick = () => {
-    if (!resolvedOptions.enableDragZoom) {
+  const handlePlotWheel = (event: WheelEvent, plotX: number) => {
+    if (!event.ctrlKey || !resolvedOptions.enableDragZoom) {
       return;
     }
 
-    const range = rangeEnd - rangeStart;
-    const center = rangeStart + range / 2;
-    applyTimeRange(center - range, center + range);
+    event.preventDefault();
+    event.stopPropagation();
+
+    const anchorTime = timeScale.invert(plotX);
+    const zoomFactor = event.deltaY < 0 ? 0.8 : 1.25;
+    const fromDistance = anchorTime - rangeStart;
+    const toDistance = rangeEnd - anchorTime;
+
+    applyTimeRange(anchorTime - fromDistance * zoomFactor, anchorTime + toDistance * zoomFactor);
+  };
+  const handleYAxisClick = () => {
+    onOptionsChange({
+      ...options,
+      yScaleMode: resolvedOptions.yScaleMode === 'log1p' ? 'linear' : 'log1p',
+    });
   };
   const handlePlotClick = (event: React.MouseEvent<SVGSVGElement>, plotX: number, plotY: number) => {
     if (dragState || !event.ctrlKey) {
@@ -1073,7 +1093,6 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
         gridColor={gridColor}
         height={height}
         margin={margin}
-        onPlotDoubleClick={handlePlotDoubleClick}
         onPlotClick={handlePlotClick}
         onPlotPointerDown={handlePlotPointerDown}
         onPlotPointerLeave={() => {
@@ -1083,6 +1102,8 @@ export const HorizonPanel: React.FC<Props> = ({ options, data, width, height, ti
         }}
         onPlotPointerMove={handlePlotPointerMove}
         onPlotPointerUp={handlePlotPointerUp}
+        onPlotWheel={handlePlotWheel}
+        onYAxisClick={handleYAxisClick}
         panelInstanceId={panelInstanceId}
         plotHeight={plotHeight}
         plotWidth={plotWidth}
